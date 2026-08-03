@@ -4,9 +4,9 @@
 // placeholder (DRY: one definition, two call sites). The count wording
 // (memberLabel and friends) is plain text with no JSX, so it lives beside the
 // rest of the circles text helpers in lib/circles.ts.
-import { useEffect, useState } from 'react'
-import { I18nManager, Image, View, StyleSheet } from 'react-native'
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
+import { useEffect } from 'react'
+import { Image, View, StyleSheet } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated'
 import { Path } from 'react-native-svg'
 import { Text } from './AppText'
 import { Glyph } from './icons'
@@ -14,10 +14,34 @@ import { MetaLine } from './MetaLine'
 import { SheetTitle } from './BottomSheet'
 import { publicImageUrl } from '../lib/api'
 import { groupFacts, type MemberImage } from '../lib/circles'
-import { XS, SM, MD, TEXT, WEIGHT, PULSE, SKELETON, SYNC, SHEET_GAP, lh } from '../tokens'
-import { INK, INK_DIM, INK_MUTED, WHITE, LINE, SURFACE_SUNK } from '../colors'
+import { XS, SM, MD, TEXT, WEIGHT, ICON, STROKE, PULSE, SKELETON, SHEET_GAP, CARD_SHADOW, lh } from '../tokens'
+import { INK, INK_MUTED, WHITE, LINE, SURFACE_SUNK } from '../colors'
 
 export const AVATAR = 40
+
+// THE footnote of the circles surfaces, wherever one stands: above a popup's
+// button (what this group is to me right now, what a friend is worth), under an
+// empty list's sentence, and inside GroupHead below. It is a HINT, not a
+// paragraph, so it takes the rank below the body (`sm`, user directive
+// 2026-07-29): at body size it read as a second description competing with the
+// one thing it is explaining. It carries NO margin — the gap over it belongs to
+// whatever it follows.
+export const NOTE_TEXT = { fontSize: TEXT.sm, color: INK_MUTED, textAlign: 'center' } as const
+
+// Dedicated "share" mark (tray + upward arrow) for the share-invite buttons —
+// the hub's, a managed circle's roster foot, and the group popup's, which is why
+// it lives here rather than in any one of them.
+// IT TAKES A SIZE like every other glyph in the app: it used to pin its own
+// ICON.md, so the `Button` that injects a size into its icon (the one place that
+// decides how big a button's mark is) was silently ignored, and a stacked button
+// standing beside a 24dp option carried an 18dp mark (user report 2026-07-31).
+// The pen is the app's own too — it was drawn at a 1.9 of its own, a hair off the
+// STROKE.base every other line-art mark at this size uses.
+export const ShareGlyph = ({ color = WHITE, size = ICON.md }: { color?: string; size?: number }) => (
+  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
+    <Path d="M12 3v12" /><Path d="M8 7l4-4 4 4" /><Path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
+  </Glyph>
+)
 
 // THE purple disc the avatar lane wears when there is no photograph in it: a
 // person's initial, the friends star, or — on the roster's queue row — how many
@@ -27,7 +51,7 @@ export const AVATAR = 40
 // for a mark that is not a character.
 export function AvatarDisc({ size = AVATAR, text, children }: { size?: number; text?: string; children?: React.ReactNode }) {
   return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: INK, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: INK, alignItems: 'center', justifyContent: 'center', boxShadow: CARD_SHADOW }}>
       {children ?? <Text style={{ color: WHITE, fontWeight: WEIGHT.medium, fontSize: size * 0.4 }}>{text}</Text>}
     </View>
   )
@@ -40,7 +64,13 @@ export function Avatar({ userId, name, image, size = AVATAR }: { userId: string;
   const label = (name ?? '').trim()
   const initial = label.charAt(0) || '?'
   return uri ? (
-    <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+    // A FACE IS A TILE LYING ON THE PAGE, so it wears the app's one lift like
+    // every other one (user directive 2026-08-03) — the disc below it too, so a
+    // roster whose rows are half photographs and half initials reads as one run.
+    // The lift is on a wrapper because RN's ImageStyle carries no `boxShadow`.
+    <View style={{ borderRadius: size / 2, boxShadow: CARD_SHADOW }}>
+      <Image source={{ uri }} style={{ width: size, height: size, borderRadius: size / 2 }} />
+    </View>
   ) : (
     <AvatarDisc size={size} text={initial}>
       {label === '★' ? <StarGlyph size={size * 0.5} color={WHITE} /> : undefined}
@@ -99,7 +129,7 @@ const gh = StyleSheet.create({
   // The app's footnote rank, the same one the fact line it follows takes: it is
   // a fact, not a heading. No margin of its own — the block's `gap` is what
   // stands it off the name under it.
-  note: { fontSize: TEXT.sm, color: INK_MUTED, textAlign: 'center' },
+  note: NOTE_TEXT,
 })
 
 export const StarGlyph = ({ size, color }: { size: number; color: string }) => (
@@ -152,68 +182,6 @@ export function SkeletonRows({ rows = SKELETON.maxRows, lines = 1, first = true,
   )
 }
 
-// ── SyncBar ────────────────────────────────────────────────────────────────
-// The other half of SkeletonRows, for the other half of the wait. A roster
-// opens FULL — the people the last visit left are on screen from the first
-// frame — so once the round trip that corrects them is running there is no
-// placeholder left to say so, and a list that quietly rearranges itself a beat
-// later reads as a glitch. This is the word for that beat and nothing more: a
-// hairline segment drifting along the list's TOP EDGE, over the very rows it is
-// about. Absolutely positioned, so it can never move a row; no track under it,
-// no percentage; gone on a fade the moment the answer lands. A list with
-// NOTHING painted yet doesn't wear it — its skeleton is already saying that, and
-// the two together would be two voices for one wait.
-// Drop it as the LAST child of the card/box the list fills (it paints over the
-// first row's top edge, and a later sibling is what puts it there on Android).
-export function SyncBar({ visible }: { visible: boolean }) {
-  const [width, setWidth] = useState(0)
-  const progress = useSharedValue(0)
-  const shown = useSharedValue(0)
-
-  useEffect(() => {
-    if (visible) {
-      progress.value = 0
-      progress.value = withRepeat(
-        // LINEAR, and the travel below is a segment-width longer than the edge:
-        // at constant speed the segment leaves one end exactly as it enters the
-        // other, so the drift never stops. withTiming's own eased default would
-        // park it off-screen at both ends of every cycle and the mark would
-        // blink instead of drift. The period is the app's one PULSE, the same
-        // clock the skeleton above breathes on.
-        withTiming(1, { duration: PULSE.phaseMs, easing: Easing.linear }),
-        -1,
-        false,
-      )
-      shown.value = withTiming(1)
-      return
-    }
-    // The drift keeps running THROUGH the fade and stops after it: cancelling on
-    // the spot would freeze the segment mid-edge while it faded out.
-    shown.value = withTiming(0, undefined, done => { if (done) cancelAnimation(progress) })
-  }, [visible, progress, shown])
-
-  // Physical (left/translateX), not start/end: the transform is what carries the
-  // direction, off the same flag every other RTL flip in the app reads.
-  const segment = width * SYNC.segment
-  const travel = width + segment
-  const from = I18nManager.isRTL ? width : -segment
-  const sign = I18nManager.isRTL ? -1 : 1
-  const drift = useAnimatedStyle(() => ({
-    opacity: shown.value,
-    transform: [{ translateX: from + progress.value * travel * sign }],
-  }), [from, travel, sign])
-
-  return (
-    <View
-      style={sk.syncTrack}
-      pointerEvents="none"
-      onLayout={e => setWidth(e.nativeEvent.layout.width)}
-    >
-      <Animated.View style={[sk.syncSegment, { width: segment }, drift]} />
-    </View>
-  )
-}
-
 // ── Meta line ──────────────────────────────────────────────────────────────
 // The fact line under a row's title is components/MetaLine.tsx, and a row that
 // carries one is components/Strip.tsx — the app's one row, which is what these
@@ -238,11 +206,4 @@ const sk = StyleSheet.create({
   line: { height: lh(TEXT.md), justifyContent: 'center' },
   bar: { height: SKELETON.barHeight, borderRadius: SKELETON.barHeight / 2, backgroundColor: SURFACE_SUNK },
   meta: { height: SKELETON.metaHeight, borderRadius: SKELETON.metaHeight / 2, backgroundColor: SURFACE_SUNK },
-  // A lane across the list's top edge with nothing drawn in it: only the segment
-  // inside is ever visible, so a list that is NOT syncing shows no line at all
-  // rather than an empty track waiting to be filled.
-  syncTrack: { position: 'absolute', top: 0, left: 0, right: 0, height: SYNC.height, overflow: 'hidden' },
-  // The softest ink there is: over the card's white it reads as a shade passing
-  // along the edge, not as a bar laid on top of it.
-  syncSegment: { position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: SYNC.height / 2, backgroundColor: INK_DIM },
 })

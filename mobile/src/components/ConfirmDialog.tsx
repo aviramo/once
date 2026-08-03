@@ -3,7 +3,7 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native'
 import { Text, TextInput } from './AppText'
 import { Button } from './Button'
 import { BottomSheet, SheetTitle, SheetDesc, SheetActions } from './BottomSheet'
-import { SM, MD, RADII, TEXT, WEIGHT, STROKE, SHEET_GAP, lh } from '../tokens'
+import { SM, MD, RADII, TEXT, WEIGHT, STROKE, SHEET_GAP, CARD_SHADOW, lh } from '../tokens'
 import { SURFACE, INK, WHITE, INK_SUBTLE, INK_DIM, INK_MUTED } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { CloseIcon, CheckIcon } from './icons'
@@ -50,6 +50,7 @@ export function ConfirmDialog({
   confirmFlex,
   confirmDisabled,
   actionNote,
+  onClosed,
 }: {
   visible: boolean
   title: string
@@ -89,6 +90,17 @@ export function ConfirmDialog({
    * shape the friends page's invite block has (CirclesPage `friendsInvite`).
    * Only the friend-invite popup wears one (user directive 2026-08-02). */
   actionNote?: string
+  /** THE QUESTION HAS FINISHED LEAVING THE SCREEN — its native window is gone
+   *  (BottomSheet's own `onClosed`, forwarded). For the one caller shape this
+   *  dialog cannot survive: an answer that TEARS DOWN the surface the question
+   *  is standing in (the group popup's leave, a roster page's leave / handover).
+   *  A ConfirmDialog is a Modal nested inside its host's Modal, and a host that
+   *  unmounts on the same commit takes that window down mid-flight — which on
+   *  Android leaves an orphaned window over the app swallowing every touch: the
+   *  screen "freezes" the moment the popup has finished sliding away (reported
+   *  2026-08-03, leaving a circle). So the host closes the QUESTION first and
+   *  does the tearing down from here, one window at a time. */
+  onClosed?: () => void
 }) {
   const [pressed, setPressed] = useState<'confirm' | 'cancel' | null>(null)
   useEffect(() => { if (!busy) setPressed(null) }, [busy])
@@ -104,6 +116,7 @@ export function ConfirmDialog({
     <BottomSheet
       visible={visible}
       onDismiss={dismiss}
+      onClosed={onClosed}
       busy={busy}
       // The handle and the swipe are BottomSheet's own defaults — see the note
       // at the top of this file. Nothing here overrides them.
@@ -218,6 +231,7 @@ const styles = StyleSheet.create({
     backgroundColor: SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
+    boxShadow: CARD_SHADOW,
   },
   checkboxChecked: {
     backgroundColor: INK,

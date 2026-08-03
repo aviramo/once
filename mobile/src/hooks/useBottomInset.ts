@@ -1,4 +1,5 @@
 import { useSafeAreaInsets, initialWindowMetrics } from 'react-native-safe-area-context'
+import { BOTTOM_BAND_MAX } from '../tokens'
 
 // Single source of truth for "how much space the system takes at the BOTTOM of
 // the window" — the value every bottom-anchored surface pairs with
@@ -41,8 +42,23 @@ let maxBottomSeen = initialWindowMetrics?.insets.bottom ?? 0
 //    the control's whole bottom air, and cancelling it left the chat composer
 //    flush against the keyboard — by a different amount on each platform, since
 //    the number was the device's rather than the design's.
+// THE MARK ONLY EVER GROWS, SO WHAT FEEDS IT MUST BE THE BAND AND NOTHING ELSE.
+// A high-water mark cannot take back a number it should never have believed, and
+// on Android the safe area is not always the band: edge-to-edge + adjustResize
+// folds the IME inset into `insets.bottom` on some devices, so opening the chat
+// composer once handed this hook ~300dp — and every bottom-anchored surface in
+// the app, the dock included, stood that far off the bottom of the screen for the
+// rest of the session, with no keyboard anywhere in sight (user report
+// 2026-08-03: "the menu row isn't at the bottom, it went up because of the
+// keyboard from the chat"). `BOTTOM_BAND_MAX` is what tells the two apart: no
+// system band at the bottom of a window is taller than a drawn navigation bar, so
+// anything above it is a keyboard and is not furniture this hook may report.
+//
+// It is a CEILING ON THE INPUT, not on the output: a device with a genuine 48dp
+// bar keeps every pixel of it (the case bottomGap must never cap), and an
+// implausible reading is simply not learned.
 export function useBottomInset(): number {
   const { bottom } = useSafeAreaInsets()
-  if (bottom > maxBottomSeen) maxBottomSeen = bottom
+  if (bottom > maxBottomSeen && bottom <= BOTTOM_BAND_MAX) maxBottomSeen = bottom
   return maxBottomSeen
 }

@@ -11,6 +11,7 @@ import { t, lang } from '../src/i18n'
 import { LoginForm } from '../src/components/LoginForm'
 import { PAGE, INK, INK_BODY, INK_HINT } from '../src/colors'
 import { XS, SM, MD, TEXT, WEIGHT, lh, bottomGap } from '../src/tokens'
+import { KeyboardSurface } from '../src/hooks/useKeyboard'
 import { getMagicLinkRedirect } from '../src/lib/authRedirect'
 import { legalUrl } from '../src/lib/links'
 
@@ -85,7 +86,9 @@ export default function LoginPage() {
   const handleEmail = async (email: string) => sendMagicLink(email)
 
   return (
-    <View style={styles.root}>
+    // The page carries the email field, so the page is what gives way to the
+    // keyboard (user directive 2026-08-03) — see KeyboardSurface.
+    <KeyboardSurface style={styles.root}>
       {/* The shared purple band with white glyphs, as on every other screen. */}
       <AppStatusBar />
       <SafeAreaView style={styles.content} edges={['top', 'left', 'right']}>
@@ -124,7 +127,7 @@ export default function LoginPage() {
           </View>
         </View>
       </SafeAreaView>
-    </View>
+    </KeyboardSurface>
   )
 }
 

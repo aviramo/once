@@ -49,8 +49,10 @@ export const STORAGE = {
 export const SEEN_FLAGS = {
   /** Home pull-to-skip first-run demo choreography. */
   homeDemo: 'home_demo',
-  /** Page2 pull-to-decline first-run demo choreography. */
-  page2Demo: 'page2_demo',
+  /** The invitation's pull-to-decline first-run demo choreography. The STORED
+   *  VALUE keeps the old name: it is on every existing device, and renaming it
+   *  would replay the demo for everyone who has already seen it. */
+  inviteDemo: 'page2_demo',
   /** The user has opened the Circles hub at least once. Until he has, home's
    *  dock wears the notification dot on its Circles entry — the app's whole
    *  "your circles decide who you see" onboarding, replacing the forced nudge

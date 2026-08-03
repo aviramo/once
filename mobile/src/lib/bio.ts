@@ -10,6 +10,12 @@
 
 export const BIO_MAX = 150
 
+/** How tall the inline editor may get WHILE EDITING, in lines (user directive
+ * 2026-08-03). Past this the field scrolls inside itself instead of growing, so
+ * it stays where the photo puts it instead of running off the bottom of the
+ * page it is drawn on. It does not touch how the bio READS — a finished bio is drawn in full. */
+export const BIO_EDIT_LINES = 5
+
 /** Trim surrounding whitespace and remove blank lines: any run of newlines
  * (with only whitespace between them) collapses to a single line break, so a
  * saved bio never carries empty lines. Applied wherever a bio is committed so

@@ -14,11 +14,6 @@
     "updates": {
       "url": "https://u.expo.dev/f93f886e-2664-484d-be31-726650198ddc"
     },
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F1EEF8"
-    },
     "ios": {
       "supportsTablet": false,
       "usesAppleSignIn": true,
@@ -50,16 +45,50 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "category": ["BROWSABLE", "DEFAULT"],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
           "data": [
-            { "scheme": "https", "host": "once-lake.vercel.app", "pathPrefix": "/g/" },
-            { "scheme": "https", "host": "once-lake.vercel.app", "pathPrefix": "/f/" }
+            {
+              "scheme": "https",
+              "host": "once-lake.vercel.app",
+              "pathPrefix": "/g/"
+            },
+            {
+              "scheme": "https",
+              "host": "once-lake.vercel.app",
+              "pathPrefix": "/f/"
+            }
           ]
         }
       ]
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#F1EEF8",
+          "imageWidth": 200,
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#F1EEF8"
+          },
+          "android": {
+            "image": "./assets/splash-icon.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#F1EEF8",
+            "imageWidth": 200,
+            "dark": {
+              "image": "./assets/splash-icon.png",
+              "backgroundColor": "#F1EEF8"
+            }
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-location",

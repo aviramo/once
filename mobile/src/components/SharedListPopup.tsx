@@ -18,18 +18,17 @@
 // primitive, so a person here looks identical to one in the Circles sheet.
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { View, StyleSheet } from 'react-native'
-import Animated, { LinearTransition } from 'react-native-reanimated'
 import { Strip } from './Strip'
-import { BottomSheet, SheetTitle } from './BottomSheet'
+import { BottomSheet, SheetTitle, SheetScroll } from './BottomSheet'
 import { Avatar, SkeletonRows } from './CircleBits'
 import { GroupsIcon } from './icons'
-import { GroupSheet } from './CirclesPage'
+import { GroupSheet } from './GroupSheet'
 import { tap } from '../lib/haptics'
 import { groupFacts, friendOfLabel, orderSharedCircles, sharedGroups, sharedFriends, useMyFriendCount, type SharedGroup, type FriendItem } from '../lib/circles'
 import type { MetaPart } from '../lib/meta'
 import { t } from '../i18n'
-import { MOTION, RADIUS, SHEET_GAP } from '../tokens'
-import { INK, SURFACE } from '../colors'
+import { RADIUS, SHEET_GAP, CARD_SHADOW } from '../tokens'
+import { INK, PAGE, SURFACE } from '../colors'
 
 /** One row: a leading avatar/icon, a title line, and the facts under it — any
  *  number of them, composed onto ONE meta line (a group carries two facts, a
@@ -41,11 +40,6 @@ export type SharedRow = {
   meta?: MetaPart[]
   onPress: () => void
 }
-
-/** The app's one resize, at the app's one duration — the same transition a chip
- *  takes when its label changes (Chip.tsx) and home's status card takes when its
- *  text does. */
-const LIST_RESIZE = LinearTransition.duration(MOTION.base)
 
 export function SharedListPopup({
   visible, title, rows, skeletonLines = 1, onDismiss, children,
@@ -66,24 +60,32 @@ export function SharedListPopup({
    *  absolutely positioned by RN, so it takes no room and adds no gap. */
   children?: ReactNode
 }) {
+  // THE PAGE'S OWN TINT, not the popup's white (user directive 2026-08-03).
+  // This is the second surface that is not white, and it is the same case as the
+  // address search: a PAGE holding a white CARD (the run of rows below), and that
+  // card only reads as lifted off a tinted ground.
   return (
-    <BottomSheet visible={visible} onDismiss={onDismiss}>
+    <BottomSheet visible={visible} onDismiss={onDismiss} ground={PAGE}>
       <View style={styles.wrap}>
         <SheetTitle>{title}</SheetTitle>
-        {/* THE PLACEHOLDER BECOMES THE LIST, IT IS NOT REPLACED BY IT (user
-            directive 2026-08-02). Two skeleton rows stand in for a list whose
-            length is not known yet, so the box always has to change height when
-            the lists land — grow for a longer list, shrink for a shorter one —
-            and a box that changes height in one frame reads as the popup
-            jumping under the thumb. The app's one resize (LinearTransition, the
-            same one Chip.tsx and home's status card animate with) takes it
-            there instead. Declared on the CARD, which is the box whose height
-            the rows decide; the sheet around it follows, the layout animation
-            running on the shadow tree. */}
-        <Animated.View layout={LIST_RESIZE} style={styles.card}>
-          {rows == null ? (
-            <SkeletonRows rows={2} lines={skeletonLines} />
-          ) : rows.map((r, i) => (
+        {/* THE LIST ARRIVES, IT DOES NOT ANIMATE INTO PLACE (user directive
+            2026-08-03). Two skeleton rows stand in for a list whose length is
+            not known yet and the real rows simply take their place: a resize
+            playing out under the thumb the moment the server answers reads as
+            the popup still working when the answer is already there. No layout
+            transition here — do not restore one. */}
+        {/* A LIST HAS NO LENGTH THE POPUP CAN COUNT ON, so it is the sheet's one
+            block allowed to run long. TWO HALVES, AND EITHER ALONE DOES NOTHING:
+            the block gives at the bottom (SheetScroll), and this wrap declares
+            `flexShrink` so the card's `maxHeight` actually reaches it — a column
+            that cannot shrink hands the scroll its full content height, the rows
+            paint straight past the card's bottom edge and off the screen, taking
+            the popup's own bottom air with them. */}
+        <SheetScroll>
+          <View style={styles.card}>
+            {rows == null ? (
+              <SkeletonRows rows={2} lines={skeletonLines} />
+            ) : rows.map((r, i) => (
             // The app's ONE row (components/Strip.tsx), the same one the
             // Circles hub and the menu are built from (user directive
             // 2026-07-29) — this popup used to keep a near-identical row of its
@@ -91,16 +93,17 @@ export function SharedListPopup({
             // one fact line: a stack of meta lines made a two-fact group as tall
             // as three rows of a list that has only one thing to say per row;
             // side by side they read as one sentence about the group.
-            <Strip
-              key={r.key}
-              first={i === 0}
-              icon={r.leading}
-              title={r.title}
-              meta={r.meta}
-              onPress={r.onPress}
-            />
-          ))}
-        </Animated.View>
+              <Strip
+                key={r.key}
+                first={i === 0}
+                icon={r.leading}
+                title={r.title}
+                meta={r.meta}
+                onPress={r.onPress}
+              />
+            ))}
+          </View>
+        </SheetScroll>
       </View>
       {children}
     </BottomSheet>
@@ -157,10 +160,22 @@ export function SharedCirclesPopup({
   onDismiss: () => void
 }) {
   const [selected, setSelected] = useState<SharedGroup | null>(null)
+  // A circle I have just LEFT is not a circle we share (user directive
+  // 2026-08-03). The list is the fetched pair and the fetch is not run again for
+  // a popup the user never left, so the row would have gone on standing there —
+  // and tapping it would have offered to leave a circle I am already out of. It
+  // is held here rather than by refetching: what changed is one row, and the
+  // answer is already in hand.
+  const [left, setLeft] = useState<string[]>([])
+  // A fresh fetch is a fresh popup, about a different person: the opener nulls
+  // both lists on every open, so that is when what I left last time is forgotten.
+  useEffect(() => { if (groups == null) setLeft([]) }, [groups])
   // The size of my friends circle, read off my own summary exactly as the chip
   // reads it — same rule, same number, so a row can never contradict the chip.
   const myFriends = useMyFriendCount()
-  const items = groups && friends ? orderSharedCircles(groups, friends, myFriends) : null
+  const items = groups && friends
+    ? orderSharedCircles(groups.filter(g => !left.includes(g.id)), friends, myFriends)
+    : null
   const only = items?.length === 1 ? items[0] : null
   // The one circle being a PERSON: their page is the app's root-window overlay,
   // not a popup, so the host opens it and this popup ENDS — unlike a row's tap,
@@ -210,7 +225,12 @@ export function SharedCirclesPopup({
       }) ?? null}
       onDismiss={onDismiss}
     >
-      <GroupSheet group={selected} status="joined" onClose={() => setSelected(null)} />
+      <GroupSheet
+        group={selected}
+        status="joined"
+        onClose={() => setSelected(null)}
+        onDone={() => { const id = selected?.id; if (id) setLeft(l => l.includes(id) ? l : [...l, id]) }}
+      />
     </SharedListPopup>
   )
 }
@@ -277,6 +297,10 @@ const styles = StyleSheet.create({
   // the last row are the popup's, and the gap between the title and the list is
   // the popup's between-blocks one (SHEET_GAP in tokens.ts) — this wrap used to
   // pick MD for it and the title an extra XS on top.
-  wrap: { gap: SHEET_GAP.block },
-  card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden' },
+  // `flexShrink` (with the `minHeight: 0` that makes it bite on a column) is what
+  // carries the card's maxHeight down to the list: the title keeps its size and
+  // the scroll block absorbs the whole reduction, so the last row ends above the
+  // popup's own bottom gap instead of running off the screen edge.
+  wrap: { gap: SHEET_GAP.block, flexShrink: 1, minHeight: 0 },
+  card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden', boxShadow: CARD_SHADOW },
 })

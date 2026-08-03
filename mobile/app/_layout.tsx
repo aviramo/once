@@ -2,11 +2,11 @@ import { useEffect } from 'react'
 import { Text, TextInput, AppState, View, StyleSheet } from 'react-native'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-import Animated, { LayoutAnimationConfig, useAnimatedStyle } from 'react-native-reanimated'
+import { LayoutAnimationConfig } from 'react-native-reanimated'
 import { Stack, useRouter, useSegments } from 'expo-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppStatusBar } from '../src/components/AppStatusBar'
-import { StatusBarBand } from '../src/components/StatusBarBand'
+import { StatusBarBand, BottomEdgeShade } from '../src/components/ScreenEdgeShade'
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
 import {
@@ -36,7 +36,7 @@ import { stashInviteUrl } from '../src/lib/circles'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { STORAGE } from '../src/keys'
 import { DEFAULT_FAMILY, FONT_SCALE, TEXT_START } from '../src/fonts'
-import { KeyboardProvider, useKeyboardResizeMode, useKeyboardShrinkSV } from '../src/hooks/useKeyboard'
+import { KeyboardProvider, useKeyboardResizeMode } from '../src/hooks/useKeyboard'
 import { PAGE } from '../src/colors'
 
 // Noto Sans Hebrew covers both Latin and Hebrew, with real weighted faces 400–800.
@@ -339,49 +339,25 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-// APPLICATION POINT 1 of 2 for the keyboard (see src/hooks/useKeyboard.ts).
+// THE ROOT DOES NOT SHRINK ANY MORE — A KEYBOARD BELONGS TO A PAGE (user
+// directive 2026-08-03). This wrapper padded the WHOLE app by the keyboard's
+// height, which meant every page moved for a keyboard, including the ones that
+// cannot be typed into at all. Home is the one that showed it: a chat put away
+// with its IME still coming down left home laid out in the shorter box — the
+// card cropped and the dock parked halfway up the screen, over a keyboard
+// belonging to nothing (emulator, 2026-08-03).
 //
-// The page shrinks by exactly the keyboard's height, so its bottom edge is flush
-// against the top of the keyboard at every frame of the movement. Everything
-// below this in the tree — every route, and every OverlaySheet, since those are
-// absoluteFill children of home's shell — is simply laid out in a shorter box
-// and needs to know nothing about a keyboard. The other application point is the
-// `Modal` in BottomSheet.tsx, which is a separate native window and does not
-// inherit this.
+// What the shrink IS has not changed, only where it is declared: each surface
+// with a text field wraps itself in `KeyboardSurface` (src/hooks/useKeyboard),
+// and a `BottomSheet` — its own native window — lifts itself by the same value.
+// Home declares nothing and is always the whole screen.
 //
-// `paddingBottom` rather than a transform: the page must SHRINK, not slide. A
-// translate would push the top of the page off the screen. This does cost a Yoga
-// layout pass per frame while the keyboard moves — that is the price of the
-// bottom edge tracking the keyboard instead of jumping to meet it, and it is
-// what the platform's own `adjustResize` does natively.
-//
-// It shrinks by `useKeyboardShrinkSV()` — the keyboard's height less HALF the
-// app's bottom air (user directive 2026-07-30). The keyboard is one more piece of
-// system furniture standing at the bottom of the window, exactly like the
-// navigation bar and the home indicator, so the page stops where the furniture
-// starts; but the air a control holds is there to keep it off the system's bottom
-// band, and a keyboard covers that band, so half of it is enough. Every
-// bottom-anchored control therefore ends `bottomGap(...)` above the screen's edge
-// at rest and half of it above the keyboard, on every device and both platforms.
-//
-// It used to subtract `useBottomInset()` instead, on the same reasoning about the
-// band being dead space — and that was the bug: `bottomGap` is a `max`, so on any
-// device whose band exceeds the design gap (every iPhone: a 34 home-indicator
-// inset against a composer's SM) the band IS the control's whole air, and
-// cancelling it deleted the air rather than the dead space. The chat composer sat
-// flush on the keyboard while sitting well clear of the screen edge at rest ("the
-// gap was destroyed, there is no consistency", 2026-07-30) — and because the
-// number subtracted was the DEVICE's, the result differed per platform too. The
-// cut is a design value now, so the halving is identical everywhere.
-//
-// Both application points consume the same hook — the popup (BottomSheet.tsx) is
-// its own native window and lifts itself by exactly this value.
-function KeyboardShrink({ children }: { children: React.ReactNode }) {
-  // Once, here, at a component that never unmounts.
+// What stays here is the one thing that genuinely belongs to the app rather than
+// to a page: Android's `adjustResize` mode, which must be set exactly once, by a
+// component that never unmounts (the library restores the default on unmount).
+function KeyboardMode({ children }: { children: React.ReactNode }) {
   useKeyboardResizeMode()
-  const shrink = useKeyboardShrinkSV()
-  const style = useAnimatedStyle(() => ({ paddingBottom: shrink.value }))
-  return <Animated.View style={[{ flex: 1 }, style]}>{children}</Animated.View>
+  return <>{children}</>
 }
 
 export default function RootLayout() {
@@ -436,12 +412,15 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-    {/* The three flags are what the library auto-detects from edge-to-edge, passed
-        explicitly so the app never depends on that detection: they are what makes
-        the reported keyboard height the FULL `WindowInsets.ime()` inset (navigation
-        bar included) rather than the bar-subtracted one, and what stops the library
-        from undoing the app's edge-to-edge drawing. */}
-    <KeyboardProvider statusBarTranslucent navigationBarTranslucent preserveEdgeToEdge>
+    {/* NO FLAGS HERE. `statusBarTranslucent` / `navigationBarTranslucent` /
+        `preserveEdgeToEdge` used to be passed explicitly, to make the reported
+        keyboard height the FULL `WindowInsets.ime()` inset (navigation bar
+        included) rather than the bar-subtracted one. The app draws edge-to-edge
+        (`edgeToEdgeEnabled` in app.json), and the library forces all three ON by
+        itself in that mode (`IS_EDGE_TO_EDGE || prop`) — so stating them changed
+        nothing and only earned a warning on every launch. What guarantees the
+        full inset is the edge-to-edge flag, not a prop here. */}
+    <KeyboardProvider>
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: PAGE }}>
       {/* Global status bar: white glyphs over the purple band, everywhere. The
           OS restores the system default when backgrounded — every app owns its
@@ -455,7 +434,7 @@ export default function RootLayout() {
               first paint side-steps the race; subsequent mounts animate as
               normal. Keep this wrapper at the root so it covers every screen. */}
           <LayoutAnimationConfig skipEntering>
-            <KeyboardShrink>
+            <KeyboardMode>
               <Stack screenOptions={{ headerShown: false, animation: 'none' }}>
                 {/* ONBOARDING IS A LAYER OVER HOME, NOT A PAGE THAT REPLACES IT.
                     A stack screen is opaque by default and react-native-screens
@@ -493,13 +472,15 @@ export default function RootLayout() {
                   }}
                 />
               </Stack>
-            </KeyboardShrink>
+            </KeyboardMode>
           </LayoutAnimationConfig>
         </AuthProvider>
       </QueryClientProvider>
-      {/* Last child so it paints above every screen — and OUTSIDE the shrink, so
-          the status band never moves with the keyboard. */}
+      {/* Last children so they paint above every screen — and OUTSIDE the
+          shrink, so the app's two edges belong to the SCREEN and never move
+          with the keyboard. This is the whole app's pair; no page draws one. */}
       <StatusBarBand />
+      <BottomEdgeShade />
     </GestureHandlerRootView>
     </KeyboardProvider>
     </SafeAreaProvider>

@@ -2,8 +2,8 @@ import React from 'react'
 import { View, StyleSheet, I18nManager, Pressable, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
-import { SWITCH, SWITCH_TRAVEL, RADII, SM, MD, TEXT, lh } from '../tokens'
-import { INK, INK_MUTED, SURFACE_SUNK, SURFACE, SHADOW_BLACK } from '../colors'
+import { SWITCH, SWITCH_TRAVEL, RADII, SM, MD, TEXT, CARD_SHADOW, lh } from '../tokens'
+import { INK, INK_MUTED, SURFACE_SUNK, SURFACE } from '../colors'
 
 // The ONE on/off switch: a track with a knob that slides to the far end when
 // on. Purely presentational — it renders state and nothing else, so the row
@@ -71,6 +71,6 @@ const s = StyleSheet.create({
   knob: {
     width: SWITCH.knob, height: SWITCH.knob, borderRadius: SWITCH.knob / 2,
     backgroundColor: SURFACE,
-    shadowColor: SHADOW_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2, elevation: 2,
+    boxShadow: CARD_SHADOW,
   },
 })

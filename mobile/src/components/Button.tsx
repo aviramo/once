@@ -7,7 +7,7 @@ import { GlyphSlot } from './GlyphSlot'
 // shape's three values from the strip that owns it rather than restating them
 // here — the mark's size, the gap under it and the word's rank (see `stack`).
 import { STRIP_GLYPH, STRIP_GLYPH_GAP, STRIP_LABEL } from './OptionStrip'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, DISABLED_OPACITY } from '../tokens'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, DISABLED_OPACITY, CARD_SHADOW } from '../tokens'
 import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
@@ -38,7 +38,7 @@ import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MI
 // Exported for the one button that cannot compose <Button> (LoginForm's tiles).
 export const BUTTON_GLYPH = TEXT.md
 
-type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
+export type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -223,7 +223,12 @@ const styles = StyleSheet.create({
   // in home/login span full width, and the dialog row split evenly when
   // wrapped in flex:1 slots.
   wrap: { alignSelf: 'stretch' },
-  btn: {},
+  // A BUTTON IS A TILE LYING ON THE PAGE, so it wears the app's one lift (user
+  // directive 2026-08-03) — the same CARD_SHADOW a card, a list and a chip cast.
+  // Every variant of this component is FILLED, which is what earns it: a mark
+  // with no ground behind it (an OptionStrip option) casts nothing, because
+  // there is no tile there to lift.
+  btn: { boxShadow: CARD_SHADOW },
   disabled: { opacity: DISABLED_OPACITY },
   // The label region of the button. Owns the size invariants (minHeight,
   // paddingVertical) so a button-with-footer keeps the exact same label-area

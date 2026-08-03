@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { View, Pressable, StyleSheet, ScrollView, Image, ActivityIndicator, I18nManager, Animated as RNAnimated, Dimensions, Keyboard, Linking, TextInput as RNTextInput } from 'react-native'
-import { useSharedValue, type SharedValue } from 'react-native-reanimated'
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated'
 import { Text, TextInput } from './AppText'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
@@ -15,7 +15,8 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { BuildProfileGate } from './BuildProfileGate'
 import { ToggleRow } from './Switch'
 import { MatchCard } from './MatchCard'
-import { PullContext, type PullCtx } from './PullPane'
+import { PullContext, useScrollReach, type PullCtx, type ScrollReach } from './PullPane'
+import { useKeyboardShrinkSV } from '../hooks/useKeyboard'
 import { Gesture, GestureDetector, type GestureType } from 'react-native-gesture-handler'
 import { localPhotoUriCache, pendingDeferred, processAndUploadPhotoDeferred } from './PhotoEditor'
 import { MIN_PHOTOS, MAX_PHOTOS } from '../lib/photos'
@@ -2122,10 +2123,18 @@ const familyStyles = StyleSheet.create({
 // went on 2026-07-31, so the prop went with them: the swipe is the way out.
 
 export function PreviewFieldPage({
-  dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged, clipBottom: _clipBottom,
+  dismissGestureRef, reach, headerBottomShared, pullEngaged, clipBottom: _clipBottom, visible = true,
 }: {
   dismissGestureRef?: React.MutableRefObject<GestureType | undefined>
-  onScrollAtTop?: (atTop: boolean) => void
+  /** WHERE THE CARD'S REEL IS, for the sheet's pull to read on the frame it
+   *  decides. THE INNER SCROLL ALWAYS OUTRANKS THE PULL, and this is the only
+   *  channel that says so: the reel is a `PullScrollView` and it reports its
+   *  geometry into whatever `reach` the surrounding PullContext carries. This
+   *  page was still building the pre-2026-08-03 ctx shape, which had no `reach`
+   *  at all — so the reel reported nothing, the pull read "nothing competes" on
+   *  every frame, and a drag DOWN the reel (back toward the first photo) closed
+   *  the page instead of scrolling it. */
+  reach?: ScrollReach
   headerBottomShared?: SharedValue<number>
   // Live "the dismiss-pan is engaged" flag from the parent's usePullBehavior.
   // Threaded into pullCtx so PullScrollView drops scrollEnabled while pulling
@@ -2135,6 +2144,11 @@ export function PreviewFieldPage({
   // A SHARED value: this page must not re-render because a drag started on it.
   pullEngaged?: SharedValue<boolean>
   clipBottom?: boolean
+  /** THE PAGE IS ACTUALLY ON SCREEN. It is `keepMounted` inside its sheet, so
+   *  mounting is no longer being SEEN: the first-open photo tutorial waits for
+   *  the rise, or its one-shot flag is spent on a surface parked off-screen that
+   *  nobody ever looked at. */
+  visible?: boolean
 }) {
   const insets = useSafeAreaInsets()
   const { profile, update } = useUserStore()
@@ -2160,6 +2174,7 @@ export function PreviewFieldPage({
   // standing on the photo for as long as the user looks at it.
   const [tutorialAt, setTutorialAt] = useState<TapPoint | null>(null)
   useEffect(() => {
+    if (!visible) return
     let live = true
     hasSeenFlag(SEEN_FLAGS.photoMenuSeen).then(seen => {
       if (!live || seen) return
@@ -2171,7 +2186,7 @@ export function PreviewFieldPage({
       setTutorialAt({ x: width / 2, y: height / 2 })
     })
     return () => { live = false }
-  }, [])
+  }, [visible])
   const endTutorial = useCallback(() => {
     setTutorialAt(null)
     markSeenFlag(SEEN_FLAGS.photoMenuSeen)
@@ -2219,12 +2234,13 @@ export function PreviewFieldPage({
   // page never re-renders it. `idlePull` only stands in when the page is not a
   // sheet body at all and no drag can reach it.
   const idlePull = useSharedValue(false)
+  const idleReach = useScrollReach()
   const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
     panRef: dismissGestureRef,
     extraRefs: [],
-    setScrollAtTop: onScrollAtTop ?? (() => {}),
+    reach: reach ?? idleReach,
     pullEngaged: pullEngaged ?? idlePull,
-  } : null, [dismissGestureRef, onScrollAtTop, pullEngaged, idlePull])
+  } : null, [dismissGestureRef, reach, idleReach, pullEngaged, idlePull])
 
   const previewData: Profile | null = useMemo(() => {
     if (!profile) return null
@@ -2499,6 +2515,23 @@ export function PreviewFieldPage({
   // Both keys are sent every time, `null` included: null is what CLEARS the
   // field server-side, and a user who took his height back off the card must not
   // be left with the old number on the row.
+  // THE WHOLE PAGE RIDES UP WITH THE KEYBOARD, ITS BOTTOM EDGE FLUSH WITH THE
+  // KEYBOARD'S TOP, AT EVERY INSTANT (user directive 2026-08-03). The app's one
+  // keyboard rule shrinks the page from the bottom — right for a form, wrong for
+  // THIS page: it is a reel of full-screen photos whose heights are measured
+  // once and deliberately never re-measured while a keyboard is up (see
+  // MatchCard's onLayout), so a shorter window does not re-flow the card, it
+  // CROPS it — and what falls off the bottom is the bio tile, which is the one
+  // thing being edited. So the card keeps the window's full height and is simply
+  // translated up by the same amount the page was shrunk by: the bottom of the
+  // page lands on the top of the keyboard, the top of the page slides off, and
+  // nothing about the card is re-laid-out. It rides the keyboard frame by frame
+  // (a shared value, on the UI thread) rather than jumping to where the keyboard
+  // will end up, exactly as the shrink does.
+  const screenH = Dimensions.get('window').height
+  const kbShrink = useKeyboardShrinkSV()
+  const keyboardLift = useAnimatedStyle(() => ({ transform: [{ translateY: -kbShrink.value }] }))
+
   const handleSaveTraits = (height: number | null, smokes: boolean | null) => {
     update({ height, smokes })
     familySaveChain.current = familySaveChain.current
@@ -2509,7 +2542,7 @@ export function PreviewFieldPage({
   return (
     <View style={[styles.root, dismissGestureRef ? null : { paddingTop: insets.top }]}>
       {previewData ? (
-        <View style={styles.previewWrap}>
+        <Animated.View style={[styles.previewWrap, { height: screenH }, keyboardLift]}>
           <PullContext.Provider value={pullCtx}>
             <MatchCard
               match={previewData}
@@ -2537,7 +2570,7 @@ export function PreviewFieldPage({
               actions={[]}
             />
           </PullContext.Provider>
-        </View>
+        </Animated.View>
       ) : null}
       {/* WHAT CAN BE DONE TO THIS PHOTO, TOP-DOWN: move up, replace, ADD, delete,
           move down (user directive 2026-07-31, with the add placed 2026-08-01).
@@ -2913,7 +2946,14 @@ const styles = StyleSheet.create({
   genderRow: { flexDirection: 'row', gap: SM, marginTop: SM },
 
   previewWrap: {
-    flex: 1,
+    // NOT `flex: 1` — see `keyboardLift`. The box states the whole window's
+    // height and is positioned out of the flow, so the keyboard shrinking the
+    // page cannot shorten it and no frame of the keyboard's travel costs a
+    // layout. What moves is the transform.
+    position: 'absolute',
+    top: 0,
+    start: 0,
+    end: 0,
     backgroundColor: SURFACE,
   },
 

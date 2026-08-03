@@ -145,7 +145,14 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
   // bounds are well-formed by construction: the anchor's own padding is the band,
   // so the tile cannot be wider than it and its END margin is never past its
   // START one.
-  const left = Math.min(Math.max(at.x - w / 2, MD), bounds.screenW - MD - w)
+  // The END clamp may never cross the START one: a tile as wide as the band (a
+  // row carrying a whole sentence, which wraps to exactly the width it is given)
+  // makes `screenW - MD - w` land ON `MD`, and any rounding past that turns the
+  // clamp into a NEGATIVE translate — the tile drawn out through the screen's
+  // start edge, which is what the user saw on the first-open tutorial
+  // (2026-08-03). The band's start is the floor, always.
+  const band = bounds.screenW - 2 * MD
+  const left = Math.min(Math.max(at.x - w / 2, MD), Math.max(MD, bounds.screenW - MD - w))
   // THE BAND IS A LAYOUT BOX AND THE PLACEMENT IS A TRANSFORM INSIDE IT (user
   // report 2026-08-02: the tile still came out flush against a screen edge). The
   // margin used to be a `maxWidth` on a box pinned at `left: 0` — i.e. a CAP the
@@ -200,7 +207,11 @@ function TapMenuTile({ at, bounds, actions }: { at: TapPoint; bounds: Bounds; ac
         const { width, height } = e.nativeEvent.layout
         setBox(cur => (cur && cur.w === width && cur.h === height ? cur : { w: width, h: height }))
       }}
-      style={{ transform: [{ translateX: left - MD }] }}
+      // The band as a CAP as well as a box: the padded anchor states the room,
+      // but a row that cannot shrink to it (a flex row of a mark and a long
+      // sentence) is free to paint past it, and then the measured `w` is not the
+      // width being drawn. Capped here, the tile wraps inside the gutter instead.
+      style={{ maxWidth: band, transform: [{ translateX: left - MD }] }}
      >
       {/* The card's own fact tile, carrying verbs instead of facts: white
           (`onPhoto`), the app's one hairline between rows, each row a glyph and a

@@ -8,7 +8,7 @@ import { Button, BUTTON_GLYPH, BUTTON_LABEL } from './Button'
 import { t } from '../i18n'
 import { INK_SUBTLE, INK, INK_BODY, INK_HINT, SURFACE, WHITE, INK_DIM, LINE, NEGATIVE, WHITE_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
-import { XS, SM, MD, ICON, ICON_CIRCLE_SIZE, TEXT, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, MOTION, lh } from '../tokens'
+import { XS, SM, MD, ICON, ICON_CIRCLE_SIZE, TEXT, WEIGHT, INPUT_MIN_HEIGHT, BUTTON_MIN_HEIGHT, MOTION, STROKE, lh } from '../tokens'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -308,7 +308,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD,
     justifyContent: 'center',
   },
+  // The field has no rule of its own any more (see FIELD_SKIN) — an error draws
+  // one, which is what makes it read as a state rather than as the resting box.
   inputWrapError: {
+    borderWidth: STROKE.thin,
     borderColor: NEGATIVE,
   },
   input: {

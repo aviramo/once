@@ -6,6 +6,7 @@ import { useSharedValue, useAnimatedReaction, runOnJS } from 'react-native-reani
 import { Text, TextInput } from '../src/components/AppText'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../src/hooks/useBottomInset'
+import { KeyboardSurface } from '../src/hooks/useKeyboard'
 import { useRouter } from 'expo-router'
 import { AppStatusBar } from '../src/components/AppStatusBar'
 import Svg, { Circle, Line, Path } from 'react-native-svg'
@@ -24,7 +25,7 @@ import { PhotoEditor, PhotoEditorRef } from '../src/components/PhotoEditor'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { PAGE, INK, INK_HINT, INK_WASH, NEGATIVE, WHITE, SELECTION } from '../src/colors'
 import { FIELD_SKIN } from '../src/field'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, bottomGap, BOTTOM_AIR } from '../src/tokens'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, MOTION, INPUT_MIN_HEIGHT, bottomGap, BOTTOM_AIR, CARD_SHADOW } from '../src/tokens'
 
 const TOTAL_STEPS = 5
 
@@ -248,7 +249,7 @@ export default function OnboardingPage() {
   // reason, as the Circles page stack (see CLAUDE.md).
   const leaving = useSharedValue(false)
   const pull = usePullBehavior({
-    activation: 'sheet',
+
     enabled: canLeave(step),
     onCommit: useCallback(() => { leaving.value = true }, [leaving]),
   })
@@ -816,6 +817,7 @@ export default function OnboardingPage() {
     <PullPane
       gesture={pull.gesture}
       pullY={pull.pullY}
+      leaving={pull.leaving}
       style={StyleSheet.absoluteFill}
     >
     <RisingCard style={styles.layerCard} animateEnter={openedOverHome} animateExit={false}>
@@ -824,10 +826,16 @@ export default function OnboardingPage() {
         ended 34 above the screen edge on an iPhone and 16–24 on an Android, plus
         the bio step's own LG on top of that. The frame below states the app's one
         air instead (bottomGap), which is the same on every device. */}
+    {/* The step carries text fields (the name, the three date boxes, the bio),
+        so THIS page is what ends at the top of the keyboard — the app's root no
+        longer shrinks anything (user directive 2026-08-03, KeyboardSurface). It
+        wraps INSIDE the rising card, so the card stays the whole screen and only
+        the content it carries gives way. */}
+    <KeyboardSurface>
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       {/* The shared purple band with white glyphs, as on every other screen. */}
       <AppStatusBar />
-      {/* The page already ends at the top of the keyboard (_layout.tsx), so this
+      {/* The page already ends at the top of the keyboard (KeyboardSurface above), so this
           is just the pager's frame. `measuredOnceRef` below is what keeps the
           steps at their full height inside it: the content is top-aligned, so a
           shorter frame simply crops the bottom and the focused field stays put,
@@ -893,6 +901,7 @@ export default function OnboardingPage() {
         onCancel={() => setBirthConfirmOpen(false)}
       />
     </SafeAreaView>
+    </KeyboardSurface>
     </RisingCard>
     </PullPane>
     </View>
@@ -944,6 +953,10 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS,
     backgroundColor: INK_WASH,
     overflow: 'hidden',
+    // A filled tile on the page: the app's one lift (user directive
+    // 2026-08-03). It is on the card and not on `cardActive`, which is a fill
+    // laid INSIDE this box — a shadow there would be clipped by it.
+    boxShadow: CARD_SHADOW,
   },
   cardInner: {
     flex: 1,

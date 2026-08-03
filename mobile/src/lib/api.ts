@@ -3,6 +3,7 @@ import { supabase } from './supabase'
 import { useUserStore } from '../stores/userStore'
 import { getLastKnownLocation } from './location'
 import { matchImageUrls } from './profileImages'
+import { reportNetOutcome } from './net'
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!
 
@@ -121,6 +122,12 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
   }
 
   // Each attempt owns its own timeout budget, so a retry gets a full one.
+  // Every attempt also reports whether the network carried it at all
+  // (lib/net.ts): an ANSWER of any status is online, a throw — connection
+  // failure or this timeout aborting the request — is the app's own evidence
+  // that there is no internet, which is what home's notice is drawn from. The
+  // report is made and the error re-thrown untouched, so nothing about the
+  // call's own error handling changes.
   const send = (bearer: string) => {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
@@ -133,7 +140,10 @@ export async function invoke<T = any>(fn: string, body?: object): Promise<T> {
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
-    }).finally(() => clearTimeout(timeout))
+    })
+      .then(res => { reportNetOutcome(true); return res })
+      .catch(e => { reportNetOutcome(false); throw e })
+      .finally(() => clearTimeout(timeout))
   }
 
   // NEVER fire a request with no token. `Bearer ` with an empty string is not a

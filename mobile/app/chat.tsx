@@ -16,22 +16,22 @@ import { invoke } from '../src/lib/api'
 import { tap, tapMedium, tapSuccess } from '../src/lib/haptics'
 import { t, tg, genderize, lang as appLang } from '../src/i18n'
 import { useUserStore } from '../src/stores/userStore'
-import { XS, SM, MD, LG, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM, TAP_SLOP } from '../src/tokens'
+import { XS, SM, MD, LG, RADIUS, RADII, TEXT, WEIGHT, STROKE, MOTION, lh, ICON, bottomGap, LONG_PRESS_MS, OVERLAY, ROUND_BUTTON_SIZE_SM, TAP_SLOP, CARD_SHADOW } from '../src/tokens'
 import { inkOffset } from '../src/fonts'
 import { FIELD_SKIN } from '../src/field'
-import { INK, SURFACE, SURFACE_SUNK, PAGE, INK_MUTED, INK_PALE, INK_WASH, LINE, WHITE, INK_SUBTLE, INK_DIM, WHITE_SOFT, WHITE_MID, WHITE_STRONG, LIFT_SHADOW, SHADOW_BLACK } from '../src/colors'
-import { SendIcon, MicIcon, StopIcon, PlusIcon, ReplyIcon, CopyIcon } from '../src/components/icons'
+import { INK, SURFACE, SURFACE_SUNK, PAGE, INK_MUTED, INK_PALE, INK_WASH, LINE, WHITE, INK_SUBTLE, INK_HINT, INK_DIM, WHITE_SOFT, WHITE_MID, WHITE_STRONG, SHADOW_BLACK } from '../src/colors'
+import { SendIcon, MicIcon, StopIcon, PlusIcon, ReplyIcon, CopyIcon, TrashIcon } from '../src/components/icons'
 import { BottomSheet, SheetActionRow, SheetActions } from '../src/components/BottomSheet'
 import { Chip } from '../src/components/Chip'
 import { copyToClipboard } from '../src/lib/clipboard'
-import { PullPane, usePullBehavior, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
+import { PullPane, usePullBehavior, useScrollReach, PullContext, PullScrollView, type PullCtx } from '../src/components/PullPane'
 import { RisingCard } from '../src/components/RisingCard'
 import { SheetHeader, type OverlaySheetBody } from '../src/components/OverlaySheet'
 import { ChatArt } from '../src/components/ChatArt'
 import { AppStatusBar } from '../src/components/AppStatusBar'
-import { StatusBarBand } from '../src/components/StatusBarBand'
+import { StatusBarBand, BottomEdgeShade } from '../src/components/ScreenEdgeShade'
 import { useBottomInset } from '../src/hooks/useBottomInset'
-import { useKeyboardOpen } from '../src/hooks/useKeyboard'
+import { KeyboardSurface, useKeyboardOpen } from '../src/hooks/useKeyboard'
 import { chatCacheKey, chatLastOpenedKey, chatLastReadKey } from '../src/keys'
 import { defaultWeekStart, familyHasAnyDayMarked, startOfDisplayedWeek } from '../src/lib/family'
 import { nameFromTitle } from '../src/lib/profileTitle'
@@ -156,6 +156,12 @@ interface Message {
   audio_duration_ms?: number | null
   schedule?: { anchor: string; weeks: boolean[][] } | null
   reply_to?: ReplySnapshot | null
+  // A message its sender deleted. The row survives — both sides keep the same
+  // history and a reply quoting it still points somewhere — with every content
+  // column stripped server-side, so this stamp is the whole message: the bubble
+  // says "this message was deleted", on the sending side and the receiving side
+  // alike.
+  deleted_at?: string | null
   is_event?: boolean
   _pending?: boolean
   _failed?: boolean
@@ -172,6 +178,18 @@ function replyKindOf(m: Message): ReplyKind {
   if (m.location || m._loadingLocation) return 'location'
   if (m.schedule) return 'schedule'
   return 'text'
+}
+
+// The tombstone, client-side: exactly what the server writes on the row, so the
+// bubble the deleter sees the instant he taps is the bubble that comes back off
+// the wire. Every content field goes, the local previews with them.
+function markDeleted(m: Message): Message {
+  return {
+    user_id: m.user_id,
+    other_id: m.other_id,
+    created_at: m.created_at,
+    deleted_at: new Date().toISOString(),
+  }
 }
 
 // Freeze the snapshot stored on the reply we're about to send.
@@ -275,7 +293,39 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const matchIsMale = match?.is_male ?? null
   const [messages, setMessagesRaw] = useState<Message[]>([])
   const [text, setText] = useState('')
-  const [inputHeight, setInputHeight] = useState(INPUT_REST_HEIGHT)
+  const [contentHeight, setContentHeight] = useState(INPUT_REST_HEIGHT)
+  // A LINE THE USER HAS OPENED IS A LINE, EMPTY OR NOT (2026-08-03). iOS's
+  // UITextView leaves a TRAILING empty line out of its contentSize, and reports
+  // no content-size change at all for the Enter that opened it — so the field
+  // grew by nothing and the caret stood outside the pill until a character was
+  // typed on the new line. Android counts it and is untouched. The height is
+  // therefore DERIVED from the text on every render rather than being whatever
+  // the last measurement said: the keystroke is the event, since there is no
+  // other. The line unit is MEASURED (the smallest content height ever reported,
+  // less our own vertical padding) and never `lh`, which is an estimate.
+  //
+  // AND THE OPEN LINES ARE COUNTED FROM A FIXED BASE, NEVER ADDED TO WHAT WAS
+  // MEASURED. A UITextView's contentSize grows to fill its own frame, so the
+  // taller frame we hand it for an open line comes straight back as a content
+  // report: added on top of the report, one Enter ran the field away up the
+  // screen; rejected instead, the field had no honest measurement to return to
+  // and collapsed to one line the moment a character was typed (iOS emits
+  // nothing for that character — by then its contentSize already holds the
+  // height our own frame gave it). So the report is ALWAYS accepted, and the
+  // open lines are measured off the height the text had WITHOUT them
+  // (`baseRef`), which is exactly what the report settles on. The two agree
+  // instead of chasing each other: nothing is added twice, and nothing shrinks.
+  const lineUnitRef = useRef(lh(TEXT.md))
+  const baseRef = useRef(INPUT_REST_HEIGHT)
+  const openLines = Platform.OS === 'ios' ? (text.match(/\n+$/)?.[0].length ?? 0) : 0
+  if (!openLines) {
+    baseRef.current = contentHeight
+    lineUnitRef.current = Math.min(lineUnitRef.current, Math.max(1, contentHeight - INPUT_VPAD))
+  }
+  const inputHeight = Math.min(
+    INPUT_MAX_HEIGHT,
+    Math.max(contentHeight, baseRef.current + openLines * lineUnitRef.current),
+  )
   // Centring the field's line BOX in the pill still leaves the INK sitting low
   // in it: a line box is not symmetric about the letters it carries, and in
   // Hebrew the ink centre falls ~0.09 em below the box centre (inkOffset, the
@@ -574,10 +624,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   const [actionsOpen, setActionsOpen] = useState(false)
   const actionsAfterRef = useRef<(() => void) | null>(null)
   const openMsgActions = useCallback((m: Message) => {
-    if (!msgActionsAvailable(m)) return
+    if (!msgActionsAvailable(m, m.user_id === userId)) return
     setActionsMsg(m)
     setActionsOpen(true)
-  }, [])
+  }, [userId])
   const closeMsgActions = useCallback(() => setActionsOpen(false), [])
   const handleActionsClosed = useCallback(() => {
     const after = actionsAfterRef.current
@@ -594,6 +644,23 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     tapSuccess()
     copyToClipboard(m.text ?? '')
     setActionsOpen(false)
+  }, [])
+  // Deleting is ONE tap, with no confirm behind it (user directive 2026-08-03):
+  // the row names the action and the sheet is the surface it was decided on, so
+  // asking again is the app asking the user to agree with himself. A send that
+  // never reached the server has no row to tombstone and is simply dropped from
+  // the list; anything else becomes the tombstone locally at once — the server
+  // stamps the same row, and the partner's client hears it over Realtime.
+  const handleActionDelete = useCallback((m: Message) => {
+    tapSuccess()
+    setActionsOpen(false)
+    const key = m.user_id + m.created_at
+    if (m._failed || m._pending) {
+      setMessages(prev => prev.filter(p => p.user_id + p.created_at !== key))
+      return
+    }
+    setMessages(prev => prev.map(p => p.user_id + p.created_at === key ? markDeleted(p) : p))
+    invoke('app/chat_delete', { chat_delete: { created_at: m.created_at } }).catch(() => {})
   }, [])
   // The message a quote-tap just jumped to, flashed briefly as a "here it is"
   // hint. `n` is a nonce so tapping the same quote again re-triggers the flash;
@@ -735,11 +802,12 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     prevActiveRef.current = isActive
   }, [isActive])
 
-  // No keyboard avoidance here, and none anywhere else either. The page ends near
-  // the top of the keyboard (src/hooks/useKeyboard.ts), so the composer — an
-  // ordinary flex sibling at the bottom of this page — rides it up and down with
-  // nothing to do. ONE number, stated once: the app's bottom air, which the root
-  // shrink spends HALF of while the keyboard is up (the band this air clears is
+  // No keyboard avoidance here, and none anywhere else either. THIS PAGE ends
+  // near the top of the keyboard (its own `KeyboardSurface`, since 2026-08-03 —
+  // the app root shrinks nothing), so the composer — an ordinary flex sibling at
+  // the bottom of this page — rides it up and down with nothing to do. ONE
+  // number, stated once: the app's bottom air, which the shrink spends HALF of
+  // while the keyboard is up (the band this air clears is
   // under the keyboard) and none of at rest. Nothing about that is this file's
   // business, and there is deliberately no second, keyboard-aware value here.
   const safeBottom = bottomGap(bottomInset, SM)
@@ -879,6 +947,25 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }))
           clearTimeout(typingTimerRef.current)
           setOtherIsTyping(false)
+        }
+      )
+      // The partner deleting one of their own messages: the row stays and is
+      // stamped, so what arrives is an UPDATE on a message we already hold. The
+      // bubble becomes the tombstone in place — its OWN created_at string is
+      // kept, because that string is the list's key everywhere else and the wire
+      // may format the same instant differently, so the row is matched on the
+      // instant and rewritten rather than swapped for the payload. An event that
+      // never lands (socket asleep) costs nothing: the next history load reads
+      // the same stamped row.
+      .on(
+        'postgres_changes' as any,
+        { event: 'UPDATE', schema: 'public', table: 'chat', filter: `other_id=eq.${userId}` },
+        (payload: any) => {
+          const row = payload?.new as Message | undefined
+          if (!row?.deleted_at || row.user_id !== otherId) return
+          const at = Date.parse(row.created_at)
+          setMessages(prev => prev.map(m =>
+            m.user_id === row.user_id && Date.parse(m.created_at) === at ? markDeleted(m) : m))
         }
       )
       // Durable read receipts: the partner upserts a `chat_reads` row when
@@ -1125,106 +1212,46 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
   useEffect(() => { loadMoreRef.current = loadMore }, [loadMore])
 
   // ── Sheet dismiss coordination ────────────────────────────────────────────
-  // The chat is an inverted FlatList, so "scroll is at the top" can't gate the
-  // sheet's swipe-to-close the way it does for a normal body: at offset 0 the
-  // newest messages show and a downward drag scrolls into history — that must
-  // NOT be stolen. The sheet opens with dragFrom="header" and ChatPage overrides
-  // the at-top flag in the cases where a downward drag genuinely can't scroll and
-  // so should close the sheet instead:
-  //   • the list is empty, or its content fits the viewport (nothing to scroll);
-  //   • the list is scrolled to the OLDEST end (the visual top of the inverted
-  //     list, its max offset) AND there is nothing more to page in — i.e. the
-  //     user "reached the top" and keeps pulling down. That is the standard
-  //     pull-to-close-from-the-top, just at the inverted list's far end.
+  // NOTHING TO COORDINATE ANY MORE. The message list is inverted, so a drag
+  // downward scrolls INTO history at offset 0 and runs out only at the list's
+  // MAX offset — and that is now one term in the pull's own arithmetic
+  // (`inverted` on ScrollReach), asked of the scroll on the frame the gesture
+  // decides. What stood here was this page's way of answering a boolean the
+  // gesture used to depend on: its own layout/content measurements, a
+  // scrollability flag, a re-assert on every open to survive the sheet's seed,
+  // and the two mechanisms that turned all of that back into a drag. All of it
+  // is deleted, and with it the bug it carried — a FlatList hands its onLayout
+  // to more than its own box, so the box that came out of it (222dp holding
+  // 835dp of content) said the list had plenty left to scroll and the sheet
+  // refused a body swipe for the rest of its life.
   //
-  // Two mechanisms, because a downward drag reaches the dismiss pan two ways:
-  //   • Not scrollable (empty / fits): turn the list's own scroll OFF. There is
-  //     nothing to scroll, and with scroll disabled the drag falls straight
-  //     through to the (ancestor) dismiss pan.
-  //   • Scrollable but at the oldest end: scroll must STAY on (the user has to be
-  //     able to scroll back down), so instead the list runs over PullScrollView —
-  //     an RNGH ScrollView wired `simultaneousHandlers` to the dismiss pan — so
-  //     the pan can claim the boundary overscroll while the pinned native scroll
-  //     can't move. This is the same coordination every card surface uses.
-  // PullScrollView's own at-top probe (contentOffset.y < 8) is meaningless for an
-  // inverted list, so we feed it a no-op setScrollAtTop and drive the real flag
-  // ourselves below. `sheetBody` is a fresh object each render but its
-  // `onScrollAtTop` fn is stable — mirror through a ref.
-  const sheetBodyRef = useRef(sheetBody)
-  sheetBodyRef.current = sheetBody
-  const listLayoutH = useRef(0)
-  const listContentH = useRef(0)
-  // Message count read during render so syncScrollability (empty-deps) sees it.
-  const msgCountRef = useRef(0)
-  msgCountRef.current = reversedMessages.length
-  // Default scrollable=true: scroll stays on until the list has measured, so a
-  // populated chat never briefly disables its scroll in the frame before its
-  // content size lands.
-  const [listScrollable, setListScrollable] = useState(true)
-  const syncScrollability = useCallback(() => {
-    const empty = msgCountRef.current === 0
-    const measured = listLayoutH.current > 0 && listContentH.current > 0
-    // Fits = content no taller than the viewport → nothing to scroll. An empty
-    // list is that by definition (onContentSizeChange never lands a useful
-    // height for zero rows, so don't wait on a measurement for it).
-    const fits = empty || (measured && listContentH.current <= listLayoutH.current + 1)
-    // Disable the list's own scroll only when there is nothing to scroll.
-    setListScrollable(!fits)
-    // Distance from the OLDEST end (the inverted list's max offset / visual top).
-    const distFromOldest = listContentH.current - listLayoutH.current - scrollOffsetRef.current
-    const dismissable = fits
-      ? true
-      : !measured
-        ? false
-        : !hasMoreRef.current && distFromOldest <= 8
-    sheetBodyRef.current?.onScrollAtTop(dismissable)
-  }, [])
-  // Re-assert after every (re)open: the sheet re-seeds scrollAtTop=false on open
-  // (dragFrom="header"), and its parent effect runs AFTER this child's, so a
-  // plain effect here would be clobbered. A rAF lands the report after that
-  // seed. On a first open onLayout/onContentSizeChange also fire and agree; this
-  // also covers the keep-mounted reopen, where neither re-fires because the
-  // parked list never re-lays-out.
-  useEffect(() => {
-    if (!isActive) return
-    const id = requestAnimationFrame(syncScrollability)
-    return () => cancelAnimationFrame(id)
-  }, [isActive, syncScrollability])
-  // Re-evaluate the moment the list empties or gets its first message, so the
-  // empty short-circuit above flips without waiting on a layout callback (which
-  // never fires usefully for zero rows).
-  useEffect(() => { syncScrollability() }, [reversedMessages.length, syncScrollability])
-
-  // The PullContext wiring for PullScrollView (scrollable-at-end path). Feed it a
-  // no-op setScrollAtTop — the real flag is driven by syncScrollability above.
-  const { dismissGestureRef, pullEngaged: sheetPullEngaged } = sheetBody ?? {}
+  // What remains is the wiring the list needs to run over PullScrollView at all:
+  // the sheet's own pan as a simultaneous handler, so the pan can claim the
+  // boundary overscroll while the pinned native scroll cannot move.
+  const { dismissGestureRef, pullEngaged: sheetPullEngaged, reach: sheetReach } = sheetBody ?? {}
   const idlePull = useSharedValue(false)
+  const idleReach = useScrollReach()
   const pullCtx = useMemo<PullCtx | null>(() => dismissGestureRef ? {
     panRef: dismissGestureRef,
     extraRefs: [],
-    setScrollAtTop: () => {},
+    reach: sheetReach ?? idleReach,
     pullEngaged: sheetPullEngaged ?? idlePull,
-  } : null, [dismissGestureRef, sheetPullEngaged, idlePull])
+  } : null, [dismissGestureRef, sheetPullEngaged, sheetReach, idlePull, idleReach])
   // Keyed off the stable dismissGestureRef, so a new renderScrollComponent can
-  // never remount the scroll view mid-drag. (pullCtx is stable now too — the
-  // engaged flag is a shared value — but the two must stay independent.)
+  // never remount the scroll view mid-drag. `inverted` is what tells the pull
+  // which end of this list is "nothing left to give".
   const renderScrollComponent = useMemo(
-    () => dismissGestureRef ? (props: any) => <PullScrollView {...props} /> : undefined,
+    () => dismissGestureRef ? (props: any) => <PullScrollView {...props} inverted /> : undefined,
     [dismissGestureRef],
   )
 
   // ── Scroll handlers ───────────────────────────────────────────────────────
-  // Capture offset + geometry from the scroll event (single source of truth for
-  // "how far from the oldest end"), then re-derive dismissability. Used for
-  // onScroll and the settle callbacks (throttled onScroll can land a few px
-  // short of the true end).
+  // The page's own reading of the offset, for its jump-to-latest button and its
+  // read receipts. The PULL reads the scroll for itself (see above), so nothing
+  // here feeds a gesture any more.
   const handleScroll = useCallback((e: any) => {
-    const ne = e.nativeEvent
-    scrollOffsetRef.current = ne.contentOffset.y
-    if (ne.contentSize) listContentH.current = ne.contentSize.height
-    if (ne.layoutMeasurement) listLayoutH.current = ne.layoutMeasurement.height
-    syncScrollability()
-  }, [syncScrollability])
+    scrollOffsetRef.current = e.nativeEvent.contentOffset.y
+  }, [])
 
   const handleEndReached = useCallback(() => {
     if (hasMoreRef.current && !loadingMoreRef.current) loadMoreRef.current()
@@ -1237,7 +1264,7 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
     tap()
     setSending(true)
     setText('')
-    setInputHeight(INPUT_REST_HEIGHT)
+    setContentHeight(INPUT_REST_HEIGHT)
     const now = new Date().toISOString()
     const reply = takeReply()
     seenSet.current.add(userId + now)
@@ -1832,9 +1859,41 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
         {showSep && <DaySeparator label={dateSeparatorLabel(msg.created_at)} />}
         {showNewSep && !showSep && <DaySeparator label={t('chat.newMessages')} bold />}
         <HighlightFlash active={highlight?.key === msgAnimKey} pulse={highlight?.n ?? 0}>
-        <SwipeToReply enabled={!msg._failed} onReply={() => beginReply(msg)} onLongPress={() => openMsgActions(msg)}>
+        <SwipeToReply enabled={!msg._failed && !msg.deleted_at} onReply={() => beginReply(msg)} onLongPress={() => openMsgActions(msg)}>
         <View style={msg._failed ? styles.failedOpacity : undefined}>
-          {msg.audio_key || msg._audioUri ? (
+          {msg.deleted_at ? (
+            // The tombstone, and it is DELIBERATELY NOT A BUBBLE (user directive
+            // 2026-08-03). A bubble is a message — a filled tile lifted off the
+            // page, purple for mine and white for theirs — and there is no
+            // message here any more, so what is left keeps only the two things
+            // that are still true: which side it came from, and when. No fill,
+            // no lift, just the app's hairline around a line of muted ink, so it
+            // reads as a GAP in the conversation rather than as something said.
+            // The ink is the same on both sides for the same reason: a message
+            // that is gone is the same nothing whoever wrote it. No ticks —
+            // whether a message that is gone was read says nothing.
+            <AnimatedBubble
+              animate={animateIn}
+              isMine={isMine}
+              style={[
+                styles.bubble,
+                styles.bubbleDeleted,
+                isMine ? styles.bubbleDeletedMine : styles.bubbleDeletedTheirs,
+              ]}
+            >
+              <View style={styles.bubbleTextRow}>
+                <TrashIcon color={INK_HINT} size={ICON.sm} />
+                <Text style={[styles.bubbleText, styles.bubbleTextDeleted]}>
+                  {t('chat.deleted')}
+                </Text>
+                <View style={styles.textBubbleFooter}>
+                  <Text style={[styles.inlineTime, styles.inlineTimeDeleted]}>
+                    {displayTime}
+                  </Text>
+                </View>
+              </View>
+            </AnimatedBubble>
+          ) : msg.audio_key || msg._audioUri ? (
             <AudioBubble
               animate={animateIn}
               isMine={isMine}
@@ -1950,11 +2009,27 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
       activePlayingKey, handlePlayStart])
 
   return (
-    <View style={[styles.root, { paddingTop: topInset, paddingBottom: safeBottom }]}>
+    // The composer is a text field, so the CHAT PAGE is what ends at the top of
+    // the keyboard (user directive 2026-08-03) — the app's root shrinks nothing
+    // any more, so home behind this sheet keeps the whole screen whatever the
+    // keyboard is doing. See KeyboardSurface.
+    <KeyboardSurface style={[styles.root, { paddingTop: topInset, paddingBottom: safeBottom }]}>
       {/* ── Messages ──
           A plain View, and one bottom padding for every case: the page itself
           ends at the top of the keyboard, so this is the design gap above it. */}
       <View style={styles.body}>
+        {/* THE BOX IS MEASURED ON A VIEW WE OWN, NEVER ON THE LIST.
+            A FlatList hands the `onLayout` it is given to more than its own
+            box — the inner content container reports through it too (x=8,
+            i.e. messagesContent's own padding) — and the handler cannot tell
+            the two apart, so whichever event lands LAST wins. When that was
+            the inner box, the list read as "222 tall holding 835 of content",
+            i.e. plenty left to scroll, and the sheet refused to close on a
+            body drag for the rest of its life: a short chat fires no scroll,
+            no further layout and no content-size event to correct it. Which
+            of the two lands last is pure timing — it showed on a physical
+            device and never on the emulator. This wrapper is a plain View of
+            ours and the list fills it, so its height is the list's, once. */}
         <View style={styles.messagesArea}>
         <PullContext.Provider value={pullCtx}>
         <FlatList
@@ -1969,17 +2044,10 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
           keyExtractor={(item) => `${item.user_id}-${item.created_at}`}
           renderItem={renderItem}
           inverted
-          // When the content fits the viewport (empty / short chat) there is
-          // nothing to scroll, so disable scroll and let a body swipe-down fall
-          // through to the sheet's dismiss pan (see syncScrollability). An
-          // overflowing chat keeps scrolling and dismisses at the oldest end.
-          scrollEnabled={listScrollable}
+          // The scroll stays ON at every length. A list with nothing to scroll
+          // reports max 0, which IS "nothing left to give", so the drag reaches
+          // the sheet's pan without the list having to be switched off for it.
           onScroll={handleScroll}
-          onScrollEndDrag={handleScroll}
-          onMomentumScrollEnd={handleScroll}
-          onLayout={e => { listLayoutH.current = e.nativeEvent.layout.height; syncScrollability() }}
-          onContentSizeChange={(_w, h) => { listContentH.current = h; syncScrollability() }}
-          scrollEventThrottle={100}
           keyboardShouldPersistTaps="handled"
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.3}
@@ -2085,8 +2153,11 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
                     // height, which is what left the text top-aligned in a taller
                     // box on iOS. The box is the wrap's (inputAnimWrap), and it
                     // centres this.
+                    // What is measured is the CONTENT; the trailing open line
+                    // iOS omits is added where the height is derived (see
+                    // `openLine`), so this stays the raw report.
                     const h = e.nativeEvent.contentSize.height
-                    setInputHeight(Math.min(INPUT_MAX_HEIGHT, h))
+                    if (h > 0) setContentHeight(Math.min(INPUT_MAX_HEIGHT, h))
                   }}
                   scrollEnabled={inputHeight >= INPUT_MAX_HEIGHT}
                   placeholder={tg('chat.inputPlaceholder', isMale)}
@@ -2263,15 +2334,17 @@ export default function ChatPage({ topInset = 0, isActive = true, onUnreadChange
 
       <MessageActionsSheet
         msg={actionsMsg}
+        mine={!!actionsMsg && actionsMsg.user_id === userId}
         visible={actionsOpen}
         onDismiss={closeMsgActions}
         onClosed={handleActionsClosed}
         onReply={handleActionReply}
         onCopy={handleActionCopy}
+        onDelete={handleActionDelete}
       />
 
       {lightboxUri && <LightboxModal uri={lightboxUri} topInset={insets.top} onClose={() => setLightboxUri(null)} />}
-    </View>
+    </KeyboardSurface>
   )
 }
 
@@ -2501,21 +2574,25 @@ function SwipeToReply({ enabled, onReply, onLongPress, children }: {
 }
 
 // What a long press can offer for this message: replying (anything that isn't a
-// failed send, which has no server row to point a quote at) and copying (text
-// only). A message with neither — a failed image, say — never opens the sheet.
-function msgActionsAvailable(m: Message): boolean {
-  return !m._failed || !!m.text?.trim()
+// failed send, which has no server row to point a quote at), copying (text only)
+// and deleting (my own messages, whatever kind they are). A message with none of
+// the three — a message already deleted — never opens the sheet.
+function msgActionsAvailable(m: Message, mine: boolean): boolean {
+  if (m.deleted_at) return false
+  return mine || !m._failed || !!m.text?.trim()
 }
 
 // The long-press sheet itself. Rows are the shared SheetActionRow, so it reads
 // as the same fabric as the photo-options sheet.
-function MessageActionsSheet({ msg, visible, onDismiss, onClosed, onReply, onCopy }: {
+function MessageActionsSheet({ msg, mine, visible, onDismiss, onClosed, onReply, onCopy, onDelete }: {
   msg: Message | null
+  mine: boolean
   visible: boolean
   onDismiss: () => void
   onClosed: () => void
   onReply: (m: Message) => void
   onCopy: (m: Message) => void
+  onDelete: (m: Message) => void
 }) {
   if (!msg) return null
   return (
@@ -2542,6 +2619,13 @@ function MessageActionsSheet({ msg, visible, onDismiss, onClosed, onReply, onCop
             icon={<CopyIcon color={INK} size={ICON.xxl} />}
             label={t('chat.msgActions.copy')}
             onPress={() => onCopy(msg)}
+          />
+        )}
+        {mine && (
+          <SheetActionRow
+            icon={<TrashIcon color={INK} size={ICON.xxl} />}
+            label={t('chat.msgActions.delete')}
+            onPress={() => onDelete(msg)}
           />
         )}
       </SheetActions>
@@ -3294,7 +3378,7 @@ const LIGHTBOX_DOUBLE_TAP_ZOOM = 2.5
 // equivalent for.
 //
 // Pinch/double-tap zoom coexists with the swipe-down close by reusing the
-// pull's own `scrollAtTop` flag as the arbiter: while zoomed it is set false,
+// pull's own `armed` switch as the arbiter: while zoomed it is set false,
 // so a one-finger drag PANS the enlarged image instead of closing; back at
 // rest it is true, so a downward drag closes. (The X always closes regardless.)
 function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: number; onClose: () => void }) {
@@ -3308,13 +3392,12 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
 
   const noop = useCallback(() => {}, [])
   const pull = usePullBehavior({
-    activation: 'sheet',
+
     enabled: true,
     onCommit: noop,
     commit: 'slideOff',
-    axis: 'y',
     headerBottom,
-  })
+  } as any)
 
   // A Modal is a separate window with no parked-off-screen rest state, so —
   // unlike an in-tree OverlaySheet — nothing keeps it mounted through the fall.
@@ -3345,8 +3428,11 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
   const ty = useSharedValue(0)
   const savedTx = useSharedValue(0)
   const savedTy = useSharedValue(0)
-  // true = a one-finger drag closes the sheet; false (while zoomed) = it pans.
-  const setCloseArmed = pull.setScrollAtTop
+  // true = a one-finger drag closes the lightbox; false (while zoomed) = it pans
+  // the enlarged image. It rides `armed`, the pull's own "this drag is spoken
+  // for" switch, rather than pretending to be a scroll position — which is what
+  // it did while the gesture asked a single at-top boolean about everything.
+  const setCloseArmed = useCallback((v: boolean) => { pull.armed.value = v }, [pull.armed])
 
   const zoomGesture = useMemo(() => {
     const resetZoom = () => {
@@ -3399,7 +3485,7 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
   }, [setCloseArmed])
 
   // The swipe-down close and the zoom gestures share one detector (PullPane's).
-  // Simultaneous, so the pull's own scrollAtTop gate — not gesture arbitration —
+  // Simultaneous, so the pull's own `armed` gate — not gesture arbitration —
   // decides whether a one-finger drag closes or pans.
   const gesture = useMemo(
     () => Gesture.Simultaneous(pull.gesture, zoomGesture),
@@ -3417,12 +3503,12 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
   return (
     <Modal visible transparent animationType="fade" onRequestClose={slideClose} statusBarTranslucent>
       {/* A Modal is its own native window, so the root layout's status bar
-          chrome does NOT reach it. Re-assert both here: light glyphs
-          (AppStatusBar) and the same purple gradient band the rest of the app
-          draws behind the OS bar (StatusBarBand — passed the inset explicitly
-          since a Modal's SafeAreaProvider context may read it as 0). Without
-          the band the pale backdrop shows through the always-transparent
-          edge-to-edge status strip. */}
+          chrome does NOT reach it. Re-assert all of it here: light glyphs
+          (AppStatusBar) and the app's own two screen edges (ScreenEdgeShade —
+          the top one passed the inset explicitly, since a Modal's
+          SafeAreaProvider context may read it as 0). Without the top shade the
+          pale backdrop shows through the always-transparent edge-to-edge
+          status strip. */}
       <AppStatusBar />
       {/* RNGH gestures don't reach into a Modal (its own window) without a
           GestureHandlerRootView inside it — same as BottomSheet. Without this
@@ -3432,10 +3518,10 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
         <PullPane
           gesture={gesture}
           pullY={pull.pullY}
-          axis="y"
+          leaving={pull.leaving}
           pointerEvents="box-none"
         >
-          <RisingCard from="up" animateExit={false} style={lbStyles.card}>
+          <RisingCard animateExit={false} style={lbStyles.card}>
             <View style={lbStyles.body}>
               <ReAnimated.Image source={{ uri }} style={[lbStyles.image, imageStyle]} resizeMode="contain" />
             </View>
@@ -3450,6 +3536,7 @@ function LightboxModal({ uri, topInset, onClose }: { uri: string; topInset: numb
           </RisingCard>
         </PullPane>
         <StatusBarBand topInset={topInset} />
+        <BottomEdgeShade />
       </GestureHandlerRootView>
     </Modal>
   )
@@ -3574,6 +3661,11 @@ const styles = StyleSheet.create({
     paddingVertical: SM,
     paddingHorizontal: MD,
     borderRadius: RADIUS,
+    // A bubble is a tile lying on the page like every other one in the app, so
+    // it wears the one lift (user directive 2026-08-03) — which is also what
+    // holds an outgoing INK bubble and an incoming white one apart from the
+    // PAGE tint they both stand on.
+    boxShadow: CARD_SHADOW,
   },
   bubbleMine: { alignSelf: 'flex-end', backgroundColor: INK },
   bubbleMineLast: { borderBottomEndRadius: 4 },
@@ -3585,6 +3677,17 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: TEXT.md, flexShrink: 1 },
   bubbleTextMine: { color: WHITE },
   bubbleTextTheirs: { color: INK },
+  // A tombstone is not a message, so it is not a message's tile: the fill and
+  // the lift come off and the app's one hairline is left around it. It keeps
+  // the bubble's radius and its box, so the row it stands in is exactly as tall
+  // as the message it replaces — the history does not re-flow because something
+  // in it was taken away. Its corners are the plain ones: the pinched last-in-
+  // group corner is the tail of somebody SPEAKING.
+  bubbleDeleted: { backgroundColor: 'transparent', boxShadow: undefined, borderWidth: StyleSheet.hairlineWidth, borderColor: LINE },
+  bubbleDeletedMine: { alignSelf: 'flex-end' },
+  bubbleDeletedTheirs: { alignSelf: 'flex-start' },
+  bubbleTextDeleted: { color: INK_SUBTLE },
+  inlineTimeDeleted: { color: INK_HINT },
 
   inlineTime: { fontSize: TEXT.sm, letterSpacing: 0.3 },
   inlineTimeMine: { color: WHITE_STRONG },
@@ -3611,7 +3714,7 @@ const styles = StyleSheet.create({
   // button's exact height and the regular purple with white dots, not the
   // washed incoming-bubble purple (user directive 2026-07-27). Capsule radius:
   // at the same height as a circular button, anything squarer reads as a
-  // mismatch next to it. Same LIFT_SHADOW that button casts (the one RoundButton
+  // mismatch next to it. Same CARD_SHADOW that button casts (the one RoundButton
   // and Chip already share), so the two float off the page as one fabric.
   typingPill: {
     flexDirection: 'row',
@@ -3621,7 +3724,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: MD,
     borderRadius: RADII.pill,
     backgroundColor: INK,
-    ...LIFT_SHADOW,
+    boxShadow: CARD_SHADOW,
   },
   typingDot: { width: 7, height: 7, borderRadius: RADII.pill, backgroundColor: WHITE },
 
@@ -3828,6 +3931,7 @@ const styles = StyleSheet.create({
     borderRadius: RADII.pill,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: INK_PALE,
+    boxShadow: CARD_SHADOW,
   },
   audioRouteBtnActive: {
     backgroundColor: INK,
@@ -3841,6 +3945,7 @@ const styles = StyleSheet.create({
     width: 34, height: 34,
     borderRadius: 17,
     alignItems: 'center', justifyContent: 'center',
+    boxShadow: CARD_SHADOW,
   },
   audioWave: {
     flex: 1,
@@ -3952,11 +4057,11 @@ const styles = StyleSheet.create({
     width: ROUND_BUTTON_SIZE_SM, height: ROUND_BUTTON_SIZE_SM, borderRadius: ROUND_BUTTON_SIZE_SM / 2,
     alignItems: 'center', justifyContent: 'center',
   },
-  scheduleDayBubbleSelected: { backgroundColor: INK },
+  scheduleDayBubbleSelected: { backgroundColor: INK, boxShadow: CARD_SHADOW },
   // My own bubble is already INK, so the free day inverts to white on it —
   // an INK fill there painted nothing at all, and the card read as its own
   // opposite (user report 2026-08-02).
-  scheduleDayBubbleSelectedMine: { backgroundColor: WHITE },
+  scheduleDayBubbleSelectedMine: { backgroundColor: WHITE, boxShadow: CARD_SHADOW },
   scheduleDayLetter: { fontSize: TEXT.md, color: INK_SUBTLE },
   scheduleDayLetterMine: { color: WHITE_STRONG },
   scheduleDayLetterSelected: { color: WHITE },

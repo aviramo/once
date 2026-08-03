@@ -128,8 +128,20 @@ fs.writeFileSync(path.join(web, 'favicon.svg'), vector + '\n')
 // The colours app.json states about the icon are the same tokens, written from
 // here rather than typed a second time by hand.
 const app = JSON.parse(fs.readFileSync(appJson, 'utf8'))
-app.expo.splash.backgroundColor = GROUND
 app.expo.android.adaptiveIcon.backgroundColor = GROUND
+// The splash is the expo-splash-screen plugin's, not the legacy `splash` key:
+// only the plugin writes Android 12+'s windowSplashScreenBackground, and its
+// `dark` branch is what keeps a device in system dark mode off a black splash
+// (MIUI, 2026-08-03). Every backgroundColor in that entry is this one ground.
+const splash = app.expo.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-splash-screen')
+if (!splash) throw new Error('app.json: expo-splash-screen plugin entry not found')
+const paintGround = (o) => {
+  if (o && typeof o === 'object') {
+    if ('backgroundColor' in o) o.backgroundColor = GROUND
+    for (const v of Object.values(o)) paintGround(v)
+  }
+}
+paintGround(splash[1])
 const notif = app.expo.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-notifications')
 if (!notif) throw new Error('app.json: expo-notifications plugin entry not found')
 notif[1].color = PURPLE // Android tints the white glyph with this in the shade

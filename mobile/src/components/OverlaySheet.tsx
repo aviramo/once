@@ -19,19 +19,19 @@
 // the bottom edge. This is for full-surface sheets.)
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeSyntheticEvent, type StyleProp, type TextLayoutEventData, type ViewStyle } from 'react-native'
-import { runOnJS, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated'
+import { I18nManager, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type NativeSyntheticEvent, type StyleProp, type TextLayoutEventData, type ViewStyle } from 'react-native'
+import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import type { GestureType } from 'react-native-gesture-handler'
-import { PullPane, usePullBehavior, type PullActivation, type PullAxis, type PullBehavior } from './PullPane'
+import { PullPane, usePullBehavior, type PullBehavior, type ScrollReach } from './PullPane'
 import { RisingCard } from './RisingCard'
 import { RoundButton } from './RoundButton'
-import { CloseIcon, BackIcon } from './icons'
+import { CloseIcon } from './icons'
 import { DragHandle } from './DragHandle'
 import Svg, { Defs, LinearGradient, Stop, Rect } from 'react-native-svg'
 import { Text } from './AppText'
 import { tap } from '../lib/haptics'
-import { SM, TEXT, WEIGHT, ICON, OVERLAY, ROUND_BUTTON_SIZE_SM, SCROLL_FADE, DRAG_HANDLE, chromeTop, lh } from '../tokens'
+import { SM, TEXT, WEIGHT, ICON, OVERLAY, PULSE, ROUND_BUTTON_SIZE_SM, SCROLL_FADE, DRAG_HANDLE, chromeTop, lh } from '../tokens'
 import { FONT_SCALE, inkOffset } from '../fonts'
 import { INK, PAGE, SURFACE } from '../colors'
 import { SHEET_TITLE } from './BottomSheet'
@@ -42,7 +42,15 @@ import { SHEET_TITLE } from './BottomSheet'
  *  as-is; SettingsPage was given the same four. */
 export type OverlaySheetBody = {
   dismissGestureRef: React.MutableRefObject<GestureType | undefined>
-  onScrollAtTop: (atTop: boolean) => void
+  /** SUSPENDS the sheet's own pull while the body says the drag is spoken for.
+   *  Circles is its one user: while a page is stacked over the hub, that page
+   *  owns the drag, and two live pans arbitrating one finger is a coin toss the
+   *  user experiences as a swipe that sometimes does nothing. */
+  armed: SharedValue<boolean>
+  /** Where the body's scroll is, for the pull to read on the frame it decides.
+   *  A body whose scroll is a PullScrollView reports into it by itself; one
+   *  that cannot scroll leaves it empty, which reads as "nothing competes". */
+  reach: ScrollReach
   headerBottomShared: SharedValue<number>
   /** True on the UI thread while the sheet's dismiss pan is being dragged. A
    *  shared value, not a boolean: a body that re-rendered every time a drag
@@ -66,27 +74,18 @@ export type OverlaySheetProps = {
    *  against. (That rule turned the drag off entirely; `swipeToClose` below is
    *  what did it, and nothing passes false any more.) */
   commit?: 'dismiss' | 'confirm'
-  /** False turns the dismiss drag OFF: the surface does not move under the
-   *  finger at all. For a sheet the user did not open and may not simply put
-   *  away — a pending invitation, which is answered by a named button and
-   *  nothing else (user directive 2026-07-30). Not the same as commit='confirm',
-   *  which still drags and springs back; here there is no gesture to arbitrate,
-   *  so a body scroll keeps every touch. */
-  swipeToClose?: boolean
-  /** 'sheet' (default) = a scrollable body, with header-vs-scroll touch
-   *  arbitration. 'scrollPan' = the body is a card that owns a PullContext
-   *  (the invite's MatchCard). */
-  activation?: PullActivation
-  /** 'header' seeds scrollAtTop=false so ONLY a drag starting on the header
-   *  row pulls. Required for bodies whose scroll can't report at-top — chat's
-   *  FlatList is inverted, so without this every drag in the message list
-   *  would be stolen by the dismiss pan. */
-  dragFrom?: 'header' | 'anywhere'
-  /** 'y' (default) rises from the bottom and closes downward. 'x' is a DRAWER:
-   *  it slides in from the START edge and closes back toward it, and the
-   *  dismiss drag becomes horizontal. The menu is the only 'x' sheet, because
-   *  it is opened by the hamburger that sits on that same edge. */
-  axis?: PullAxis
+  /** (`swipeToClose` stood here, and `activation` beside it. The first turned
+   *  the drag off entirely — the pending invitation's, until the drag came back
+   *  in 2026-08-01 as commit='confirm' — and nothing has passed it since. The
+   *  second forked the arbitration per surface; there is ONE now (user directive
+   *  2026-08-03), the circle page's. Both are gone, so no call site can turn the
+   *  app's one gesture off or fork it again.) */
+  /** (`dragFrom` stood here. It seeded the at-top flag to false so that only a
+   *  drag on the header row could pull, for a body whose scroll could not report
+   *  where it was — chat's inverted list. A scroll's OFFSET needs no seeding and
+   *  an inverted one is a term in the same arithmetic (see ScrollReach), so the
+   *  policy, its seed and the race between them are all gone. The header band
+   *  itself stays: it is measured chrome, not a policy.) */
   /** False while another sheet is stacked above this one. Disables this
    *  sheet's pan so the two never arbitrate against each other (a swipe on the
    *  settings sub-page must not also close the menu underneath it). */
@@ -94,13 +93,13 @@ export type OverlaySheetProps = {
   /** The body draws its own chrome, so no SheetHeader is rendered at all. */
   chromeless?: boolean
   /** False keeps the header ROW and drops only the close X. Not the same as
-   *  `chromeless`: on a `dragFrom="header"` sheet that row IS the drag band, so
+   *  `chromeless`: on a header-drag sheet that row IS the drag band, so
    *  it has to go on existing after the button in it does. Chat is the one
    *  (user directive 2026-07-31) — the top strip of the screen keeps closing it
    *  by drag, which is how it was already being closed mid-conversation. */
   showClose?: boolean
   /** Paints the app's drag handle on the header row, marking that band as the
-   *  thing the finger holds. Only for a `dragFrom="header"` sheet whose row is
+   *  thing the finger holds. Only for a header-drag sheet whose row is
    *  otherwise EMPTY — chat, its one call site. See SheetHeader's own prop. */
   dragHandle?: boolean
   /** Header renders as transparent chrome floating OVER the body rather than
@@ -156,10 +155,6 @@ export function OverlaySheet({
   open,
   onClose,
   commit = 'dismiss',
-  swipeToClose = true,
-  activation = 'sheet',
-  dragFrom = 'anywhere',
-  axis = 'y',
   isTop = true,
   chromeless,
   showClose = true,
@@ -192,22 +187,40 @@ export function OverlaySheet({
   // rebuild the Pan every render (a rebuilt gesture mid-drag drops the touch).
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
-  const requestClose = useCallback(() => { onCloseRef.current() }, [])
+  // A SHEET THE PULL TOOK AWAY RIDES OFF WHOLE, AND STOPS EXISTING ONLY WHEN IT
+  // LANDS (user report 2026-08-03: closing the Circles hub juddered where
+  // closing a circle PAGE inside it did not). A mount/unmount sheet's `onCommit`
+  // flips the host's `open` false on the spot, which pulled the body out of the
+  // tree mid-fall and handed RisingCard's exit — a layout animation with a
+  // motion of its own — the very surface the ride-off was already carrying: two
+  // animations on one card, from two threads. A Circles PAGE never had it,
+  // because it states `animateExit={false}` and pops itself only when the ride
+  // reaches the bottom edge. This is that, for every sheet: `riding` keeps the
+  // body mounted and its exit silent until the landing, so the surface does one
+  // thing at a time. A 'confirm' commit is not a ride at all (the card springs
+  // home and a dialog opens), so it never sets it.
+  const [riding, setRiding] = useState(false)
+  const rides = commit !== 'confirm'
+  const requestClose = useCallback(() => {
+    if (rides) setRiding(true)
+    onCloseRef.current()
+  }, [rides])
 
   // Called unconditionally (rules of hooks); ignored when the host owns one.
   const ownPull = usePullBehavior({
-    activation,
-    enabled: open && isTop && swipeToClose && !externalPull,
+
+    enabled: open && isTop && !externalPull,
     commit: commit === 'confirm' ? 'snapBack' : 'slideOff',
-    // A sheet that DISMISSES only goes away, so it is the cheap swipe every
-    // page in the app shares. A `confirm` sheet is the invitation asking the
-    // user something, and answering it costs the deliberate half-screen with no
-    // flick — the same weight page1's skip carries. See PullWeight.
-    weight: commit === 'confirm' ? 'decide' : 'close',
-    axis,
+    // EVERY sheet in the app takes the cheap swipe, the `confirm` one included
+    // (user directive 2026-08-03: the half-screen insistence is page1's SKIP and
+    // nothing else). A confirm sheet still answers nothing by itself — its
+    // 'snapBack' raises a named, cancellable question over a card that springs
+    // home — so the deliberate distance was buying a guard the dialog already
+    // is, at the price of a drag that fought the finger. See PullWeight.
+    weight: 'close',
     onCommit: requestClose,
-    headerBottom: activation === 'sheet' ? headerBottom : undefined,
-  })
+    headerBottom,
+  } as any)
   const pull = externalPull ?? ownPull
 
   // `keepMounted` with the sheet's OWN pull (no host `pull` prop): the body
@@ -219,7 +232,10 @@ export function OverlaySheet({
   // surface is truly finished — e.g. the chat ending. The menu is `keepMounted`
   // too but drives an EXTERNAL pull itself, so it opts out of the motion here.
   const selfPark = keepMounted && !externalPull
-  const { reset, setScrollAtTop, pullY, screenSpan, slidOut } = pull
+  // Read from the landing callback, which runs outside render.
+  const selfParkRef = useRef(selfPark)
+  selfParkRef.current = selfPark
+  const { reset, pullY, screenSpan, leaving } = pull
   // First paint should not animate a park (mounting already-closed must not
   // flash), but a first paint that mounts already-open (a fresh match raising
   // chat) should still ride up.
@@ -229,15 +245,24 @@ export function OverlaySheet({
     if (!selfPark) {
       // Mount/unmount sheets: RisingCard owns the rise. A 'slideOff' close
       // parks pullY at screenSpan, so without this reset a reopened sheet would
-      // mount already translated off-screen. Also (re)seeds the dragFrom
-      // policy. Only on open — a closing sheet is unmounting anyway.
-      if (open) { reset(); setScrollAtTop(dragFrom !== 'header') }
+      // mount already translated off-screen. Only on open — a closing sheet is
+      // unmounting anyway.
+      if (open) reset()
       return
     }
-    // Own-pull keepMounted: pull-driven rise/park, so RisingCard's slide is
-    // disabled below (the transform and a layout animation would fight).
-    setScrollAtTop(dragFrom !== 'header')
-    slidOut.value = false
+    // ONE THING DRIVES `pullY` AT A TIME, AND WHILE A COMMITTED PULL IS RIDING
+    // OFF IT IS THE GESTURE (user report 2026-08-03: a card page did not come
+    // down like a circle page). A swipe that commits fires `onCommit` -> the
+    // host's `onClose` -> `open` flips false -> this effect fired a SECOND
+    // `withTiming(screenSpan)` onto the very shared value the ride-off's
+    // RIDE_OFF timing was already animating. Reanimated cancels the first and
+    // restarts from wherever the surface had got to, on the default ease-in-out
+    // instead of the ease-OUT that continues the finger — the surface hesitates
+    // mid-fall and lands on somebody else's curve. A Circles page never could:
+    // its pull rides off and the page is popped only when it LANDS. So the park
+    // is what closes a sheet the user did not drag (a button, hardware back, the
+    // host deciding); a drag closes itself and this stands off it.
+    if (!open && leaving.value) return
     if (firstParkRef.current) {
       firstParkRef.current = false
       // Mounting already-closed parks with no motion (a flash is not an
@@ -255,11 +280,12 @@ export function OverlaySheet({
         runOnJS(announceArrival)()
       })
       : withTiming(screenSpan)
-  }, [open, dragFrom, externalPull, selfPark, reset, setScrollAtTop, pullY, screenSpan, slidOut, announceArrival])
+  }, [open, externalPull, selfPark, reset, pullY, screenSpan, leaving, announceArrival])
 
   const ctx: OverlaySheetBody = {
     dismissGestureRef: pull.panRef,
-    onScrollAtTop: pull.setScrollAtTop,
+    reach: pull.reach,
+    armed: pull.armed,
     headerBottomShared: headerBottom,
     pullEngaged: pull.pullEngaged,
   }
@@ -273,10 +299,6 @@ export function OverlaySheet({
       dragHandle={dragHandle}
       barBg={headerBg}
       topInset={topInset}
-      // The 'x' drawer (the menu) closes back toward its START edge, so its
-      // dismiss control is a back arrow pointing that way rather than an X.
-      // Every other sheet rises from the bottom and closes with the plain X.
-      closeIcon={axis === 'x' ? 'back' : 'close'}
       closeAccessibilityLabel={closeAccessibilityLabel}
       // No handler = no button. The row still lays out and still reports its
       // bottom edge, which is what a header-drag sheet needs from it.
@@ -285,22 +307,59 @@ export function OverlaySheet({
     />
   )
 
+  // THE LANDING IS THE ONE MOMENT ANY OF THIS IS DECIDED, AND IT IS DECIDED ON
+  // THE JS THREAD, AGAINST REACT'S OWN `open` — never against a shared-value
+  // mirror of it. A mirror is written from an effect, so on the frame the ride
+  // reaches the bottom it can still be holding the PREVIOUS answer: the Circles
+  // hub closed, its mirror had not caught up, and the sheet "rescued" itself
+  // back to rest — visible, with `open` already false, so its pane took no
+  // touches and every tap fell through to home behind it. A ghost page.
+  //
+  // So: when the ride lands, the body may leave the tree — and if the host is
+  // STILL open (the invitation, which rides off, posts `onClose`, and has a
+  // DIFFERENT page2 card written into the same open sheet by the server), the
+  // card comes back to rest instead of being parked off-screen where nobody can
+  // see or drag it. `openRef` is assigned during render, so it cannot be late.
+  const openRef = useRef(open)
+  openRef.current = open
+  const landed = useCallback(() => {
+    setRiding(false)
+    // keepMounted sheets PARK off-screen when closed — that is their closed
+    // state, not an accident — so they are never rescued.
+    if (openRef.current && !selfParkRef.current) pullY.value = 0
+  }, [pullY])
+  useAnimatedReaction(
+    () => pullY.value >= screenSpan,
+    (down, was) => { if (down && !was) runOnJS(landed)() },
+    [screenSpan, landed],
+  )
+  // Reopened before it landed, or closed by something that is not the pull:
+  // there is no ride left to wait for.
+  useEffect(() => { if (open) setRiding(false) }, [open])
+
   return (
     <PullPane
       gesture={pull.gesture}
       pullY={pull.pullY}
-      axis={axis}
+      leaving={pull.leaving}
       style={[StyleSheet.absoluteFill, zIndex != null ? { zIndex } : null]}
       pointerEvents={open ? 'box-none' : 'none'}
+      // THE SHEET'S PULL, HANDED DOWN AS A CONTEXT, so a body that scrolls
+      // cooperates with it whether or not it was written to take the `ctx`
+      // above. Every behaviour builds one now: it used to be 'scrollPan''s
+      // alone, so a card body under a sheet — the invite's MatchCard, whose
+      // photo reel is its own scroll — reported nothing and shared no handler,
+      // and the reel and the dismiss pan each took half the finger.
       pullContext={pull.pullCtx}
     >
-      {open || keepMounted ? (
+      {open || keepMounted || riding ? (
         <RisingCard
-          from={axis === 'x' ? 'side' : 'up'}
           // selfPark drives the rise/park through pullY (above), so the layout
           // slide must be off or the two transforms clobber each other.
           animateEnter={selfPark ? false : animateEnter}
-          animateExit={selfPark ? false : animateExit}
+          // Riding: the pull is already carrying this card off, so an exit
+          // animation would be a second motion on the same surface.
+          animateExit={selfPark || riding ? false : animateExit}
           // Whoever owns the rise owns the announcement: a self-parking sheet
           // rides its own pullY (above), and RisingCard — mounted with no
           // entrance in that case — would otherwise report "arrived" the
@@ -352,21 +411,18 @@ export function OverlaySheet({
 // live app, and the old measurement must not survive that.
 const TITLE_LINE_BOX = new Map<number, number>()
 
-// SVG gradient ids are document-global, so the one fade in this file names
-// itself once rather than per render.
-const HANDLE_FADE_ID = 'sheetHandleFade'
-
-// The band behind a floating drag handle. It is deliberately NOT the header
-// row's own box: the row is the DRAG area and is a whole chrome circle tall
-// (headerFloor), which as PAINT is a slab of page tint over the top of the
-// conversation. What has to be covered is the BAR, so the solid part ends just
-// under it — the handle's own line (it is centred in ROUND_BUTTON_SIZE_SM) plus
-// its thickness — and the fade carries the colour out from there. Paint and
-// touch are independent here, so shrinking this takes nothing off the gesture.
-const handleBandHeight = (topInset: number) =>
-  chromeTop(topInset) + ROUND_BUTTON_SIZE_SM / 2 + DRAG_HANDLE.height
-const HANDLE_BAND_FADE = SCROLL_FADE / 2
-const HANDLE_BAND_ALPHA = 0.5
+// The band that passes over a page's name while the page is still waiting on the
+// server (SheetHeader's `titleBusy`). Both are fractions and neither is a dp, so
+// the effect is the same shape over a two-word title and a long one.
+const TITLE_SWEEP_ID = 'sheetTitleSweep'
+/** How much of the name the band covers at once. WIDE (user directive
+ *  2026-08-03): most of the title at a time, so what passes is a shade over the
+ *  whole heading rather than a highlight running through one word of it. */
+const TITLE_SWEEP_BAND = 0.85
+/** How far the letters go under the middle of it. Deliberately gentle (user
+ *  directive 2026-08-03) and never 1: the name may go quiet, but a page's own
+ *  heading must not vanish off its bar. */
+const TITLE_SWEEP_COVER = 0.3
 
 // The bar's FLOOR. It has always been exactly one small chrome circle tall,
 // because a dismiss circle stood in every one of them — nothing declared it. Now
@@ -378,6 +434,29 @@ const HANDLE_BAND_ALPHA = 0.5
 // which is why the row's own padding is in the sum.
 const HEADER_PAD_BOTTOM = SM
 const headerFloor = (topInset: number) => chromeTop(topInset) + ROUND_BUTTON_SIZE_SM + HEADER_PAD_BOTTOM
+
+// THE BAND BEHIND A FLOATING DRAG HANDLE (user directive 2026-08-03). Chat's
+// top strip must read as the top of an ORDINARY popup: the bar is the popup's
+// bar exactly (see `DragHandle`), and it stands on a piece of the PAGE's own
+// ground that the conversation never reaches. What ends that ground is not an
+// edge but the very fade a popup already hangs where text runs past a block —
+// one SCROLL_FADE of the same colour going out to nothing (the group popup's
+// scrolling description is the reference) — so the bubbles DISSOLVE into it
+// rather than being cut by a bar of chrome. Two pieces and no measurement
+// between them: the row's box painted solid, and the fade hung off its bottom
+// edge (`top:'100%'`), which keeps the pair honest at any header height and
+// font scale.
+//
+// The air ABOVE and BELOW the bar is the tightest the app has (user directive
+// 2026-08-03): the bar is 4dp of ink, and centring it on a whole chrome circle
+// left it floating in a slab of tint half a button deep on each side. So the
+// line it stands on is its own thickness plus one small gap either way, and the
+// SOLID part of the band ends just under it — the fade carries the colour out
+// from there. This is PAINT only: the row keeps `headerFloor`, so the drag band
+// the strip advertises is exactly as tall as it always was.
+const HANDLE_LINE = DRAG_HANDLE.height + SM * 2
+const handleBandHeight = (topInset: number) => chromeTop(topInset) + HANDLE_LINE
+const HANDLE_FADE_ID = 'overlayHandleBandFade'
 
 // What the very first header lays out against, for the one frame before the
 // text engine answers: the old arithmetic, which is exact at font scale 1 and
@@ -397,9 +476,9 @@ export function SheetHeader({
   topInset,
   onClose,
   onMeasured,
-  closeIcon = 'close',
   closeAccessibilityLabel,
   titleLines = 1,
+  titleBusy = false,
   dragHandle,
 }: {
   title?: string
@@ -439,11 +518,25 @@ export function SheetHeader({
   onMeasured?: (bottom: number) => void
   /** 'close' (default) = the dismiss X. 'back' = a start-edge back arrow, for
    *  the drawer that slides off toward that edge. */
-  closeIcon?: 'close' | 'back'
   closeAccessibilityLabel?: string
   /** Max title lines before ellipsizing. Default 1; the Circles sheet passes
    *  2 so a long group name wraps instead of truncating. */
   titleLines?: number
+  /** THE PAGE'S OWN NAME IS WHAT SAYS THE PAGE IS STILL THINKING (user
+   *  directive 2026-08-03). A cache-first page opens FULL — the rows the last
+   *  visit left are on screen from the first frame — so between that and the
+   *  round trip correcting them there is a stretch where the screen is complete
+   *  and NOT final, and this is the only thing that says so. A band of the bar's
+   *  own ground passes over the TITLE, start to end, on the app's one PULSE —
+   *  the very clock the loading skeleton breathes on — so a page with nothing
+   *  yet and a page being corrected speak in one voice. Nothing is ADDED to the
+   *  screen for it: every mark that was tried beside the list (a hairline across
+   *  its top, a wash running down its edge) was a new object on the page, and
+   *  what is actually stale is what the page is ABOUT — which is what its name
+   *  stands for. And it may not be a plain FADE either (user directive
+   *  2026-08-03): dimming the whole name at once is a colour, and a colour reads
+   *  as "disabled"; a band crossing it is motion, which is what waiting is. */
+  titleBusy?: boolean
   /** Paints the app's drag handle on the row's centre. For a `dragFrom="header"`
    *  sheet that carries NOTHING else on that line — chat, its one call site
    *  (user directive 2026-08-02): the band IS the only way out of a long
@@ -452,7 +545,6 @@ export function SheetHeader({
    *  with a title/`center` by construction. See DragHandle. */
   dragHandle?: boolean
 }) {
-  const DismissIcon = closeIcon === 'back' ? BackIcon : CloseIcon
   // Where line one of the title sits, measured against the close button's
   // circle. It cannot be a static style value, because the two do NOT grow
   // together: the button is a fixed dp box whose glyph is pinned at
@@ -493,6 +585,46 @@ export function SheetHeader({
   // (user directive 2026-07-28). The INNER wrapper is what gets measured, never
   // the padded column itself: measuring the column would feed its own padding
   // back in and the wider side could then never shrink again.
+  // THE NAME IS SWEPT, NOT DIMMED (user directive 2026-08-03). Fading the whole
+  // title at once is a state the eye reads as a colour — a title that is simply
+  // paler than usual, which says "disabled", not "working" — and at any one
+  // instant nothing on the screen is moving. So what passes over the name is a
+  // BAND: the bar's own ground, laid translucent, travelling across the title
+  // from one end to the other, so the letters go quiet under it and come back
+  // as it leaves. Every letter takes its turn, which is what makes it read as
+  // motion rather than as a strength.
+  //
+  // It is painted OVER the text and not masked into it, which is what keeps it
+  // to zero new dependencies and leaves the title itself an ordinary `Text`
+  // (measured, wrapped and ink-corrected exactly as it is when nothing is
+  // loading). Its colour is therefore the BAR's, whatever the host set that to —
+  // anything else would be a tint sliding across the heading.
+  const sweep = useSharedValue(0)
+  const [titleWidth, setTitleWidth] = useState(0)
+  useEffect(() => {
+    if (!titleBusy) return
+    sweep.value = 0
+    // Start to end and BACK again (user directive 2026-08-03) — `withRepeat`'s
+    // reversing form, so the two directions are one motion rather than a cycle
+    // that jumps back to where it began. The travel is a band-width longer than
+    // the title, so each turn is taken with the band fully off the name and what
+    // is on the letters is only ever a pass. LINEAR through it, because
+    // withTiming's own default eases IN as well and the band would hang before
+    // setting off. On PULSE, the clock the loading skeleton breathes on.
+    sweep.value = withRepeat(withTiming(1, { duration: PULSE.phaseMs, easing: Easing.linear }), -1, true)
+    return () => cancelAnimation(sweep)
+  }, [titleBusy, sweep])
+  const bandWidth = titleWidth * TITLE_SWEEP_BAND
+  // Physical (translateX), so the direction is stated here rather than inherited:
+  // the band starts at the edge the name is READ from and leaves at the other,
+  // off the same flag every other RTL flip in the app reads.
+  const sweepFrom = I18nManager.isRTL ? titleWidth : -bandWidth
+  const sweepSign = I18nManager.isRTL ? -1 : 1
+  const sweepStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: sweepFrom + sweep.value * (titleWidth + bandWidth) * sweepSign }],
+  }), [sweepFrom, sweepSign, bandWidth, titleWidth])
+  const barInk = floating ? PAGE : barBg ?? SURFACE
+
   const sideContent = useRef({ start: 0, end: 0 })
   const [sideWidth, setSideWidth] = useState(ROUND_BUTTON_SIZE_SM)
   const measureSide = (which: 'start' | 'end') => (e: LayoutChangeEvent) => {
@@ -517,20 +649,7 @@ export function SheetHeader({
       pointerEvents="box-none"
       onLayout={e => onMeasured?.(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
     >
-      {/* THE BAND BEHIND A FLOATING DRAG HANDLE (user directive 2026-08-02).
-          A floating header stands over the body itself — chat is passed
-          topInset={0}, so message bubbles scroll right under it — and a bare
-          bar cannot survive that: INK_DIM vanishes on an outgoing INK bubble
-          exactly as white would vanish on an incoming one. It is the same trap
-          that drove chat's typing pill out of the row's centre the same day.
-          The answer is NOT a tile around the bar (tried, and it read as a chip
-          that had lost its label): it is the PAGE's own ground, run the full
-          width of the sheet across the top and then MELTED into the body, so
-          the handle stands on the page and the band has no edge to be read as
-          a bar of chrome. Two pieces and no measurement between them: the
-          row's own box painted solid, and one SCROLL_FADE hung off its bottom
-          (`top: '100%'`) fading that same colour out to nothing. Same fade
-          vocabulary a popup already uses where content runs past an edge. */}
+      {/* The band this row stands on — see `HANDLE_FADE_ID` above. */}
       {floating && dragHandle ? (
         <View style={[styles.handleBandBox, { height: handleBandHeight(topInset) }]} pointerEvents="none">
           <View style={styles.handleBand} />
@@ -568,7 +687,6 @@ export function SheetHeader({
           nothing. The dismiss itself is dropped only by leaving `onClose` out —
           a sheet that HAS one never hides it. */}
       {(() => {
-        const dismissAtStart = closeIcon === 'back'
         // Only a centred title needs the two sides matched (`sideWidth`); with
         // the title leading the row there is nothing to be symmetric about, and
         // measuring for it would just hold the trailing corner off its gutter.
@@ -593,9 +711,9 @@ export function SheetHeader({
             bg={floating ? undefined : PAGE}
             shadow={!!floating}
           >
-            <DismissIcon color={INK} size={ICON.round} />
+            <CloseIcon color={INK} size={ICON.round} />
           </RoundButton>
-        ), !dismissAtStart, dismissAtStart ? 'start' : 'end')
+        ), true, 'end')
           // A HANDLE is centred on the screen, not on whatever span is left
           // over. With no dismiss the row carried one side column and nothing
           // opposite it, so the free span — and the handle in it — sat a
@@ -603,18 +721,23 @@ export function SheetHeader({
           // holds a TITLE on the true centre does the same job here, and being
           // measured like any other column it keeps both sides matched.
           : dragHandle && balanced
-            ? column(<View style={styles.trailingSpacer} />, !dismissAtStart, dismissAtStart ? 'start' : 'end')
+            ? column(<View style={styles.trailingSpacer} />, true, 'end')
             : null
         // The spacer exists to CENTRE a title and for nothing else, so it is
         // rendered only when there is a centred title to hold in place.
         const otherContent = trailing ?? (balanced && !center ? <View style={styles.trailingSpacer} /> : null)
         const other = otherContent
-          ? column(otherContent, dismissAtStart, dismissAtStart ? 'end' : 'start')
+          ? column(otherContent, false, 'start')
           : null
         const middle = center ? (
           <View style={styles.centerWrap}>{center}</View>
         ) : title ? (
           <View style={[styles.titleWrap, { marginTop: titleTop }]} pointerEvents="none">
+            {/* The band rides a wrapper around the NAME alone: `titleTrailing`
+                is a mark standing beside the title, not part of it, and what is
+                stale is the name. The wrapper clips, so the band is only ever
+                over the letters and never out on the bar beside them. */}
+            <View style={styles.titleSweepWrap} onLayout={e => setTitleWidth(e.nativeEvent.layout.width)}>
             <Text
               // SHEET_TITLE centres itself — every OTHER heading in the app is a
               // popup's, standing on its own line — so a start-aligned one has to
@@ -624,6 +747,25 @@ export function SheetHeader({
               numberOfLines={titleLines}
               onTextLayout={measureTitleLine}
             >{title}</Text>
+            {/* The bar's own ground, clear at both of its ends and at
+                TITLE_SWEEP_COVER in the middle, passing over the letters. No
+                hard edge anywhere, so what is seen is the name going quiet and
+                coming back rather than a rectangle crossing it. */}
+            {titleBusy && titleWidth > 0 ? (
+              <Animated.View style={[styles.titleSweep, { width: bandWidth }, sweepStyle]} pointerEvents="none">
+                <Svg width="100%" height="100%">
+                  <Defs>
+                    <LinearGradient id={TITLE_SWEEP_ID} x1="0" y1="0" x2="1" y2="0">
+                      <Stop offset="0" stopColor={barInk} stopOpacity={0} />
+                      <Stop offset="0.5" stopColor={barInk} stopOpacity={TITLE_SWEEP_COVER} />
+                      <Stop offset="1" stopColor={barInk} stopOpacity={0} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${TITLE_SWEEP_ID})`} />
+                </Svg>
+              </Animated.View>
+            ) : null}
+            </View>
             {titleTrailing}
           </View>
         ) : dragHandle ? (
@@ -631,9 +773,9 @@ export function SheetHeader({
           // line — the height a dismiss circle occupies — so the band reads at
           // exactly the level every other sheet's heading and X do. It also
           // holds the row open, which is what the spacer below is for. The bar
-          // is BARE; what makes it legible is the band behind it (see the fade
-          // above), never a tile of its own — a white capsule around 48×4 of
-          // ink read as a chip that had lost its label (user, 2026-08-02).
+          // is BARE — never a tile of its own, which read as a chip that had
+          // lost its label (user, 2026-08-02); over content it goes white and
+          // casts its own shadow instead (see `DragHandle`).
           <View style={styles.handleWrap}><DragHandle /></View>
         ) : (
           // A FLOATING header over a photo carries neither (chat, the profile
@@ -647,9 +789,7 @@ export function SheetHeader({
         // A start-aligned row reads exactly as it is written: the name, then
         // what the page can do, then the way out if it has one.
         if (!balanced) return <>{middle}{other}{dismiss}</>
-        return dismissAtStart
-          ? <>{dismiss}{middle}{other}</>
-          : <>{other}{middle}{dismiss}</>
+        return <>{other}{middle}{dismiss}</>
       })()}
     </View>
   )
@@ -695,6 +835,27 @@ const styles = StyleSheet.create({
     start: 0,
     end: 0,
     backgroundColor: 'transparent',
+  },
+  // Full strength: this is the top of the page, not a veil over the body — the
+  // conversation stops under it and the fade is where the two meet.
+  handleBandBox: {
+    position: 'absolute',
+    top: 0,
+    start: 0,
+    end: 0,
+  },
+  handleBand: {
+    flex: 1,
+    backgroundColor: PAGE,
+  },
+  // Hung off the bottom EDGE of that box rather than measured against it, which
+  // is what keeps the pair honest at any header height and font scale.
+  handleBandFade: {
+    position: 'absolute',
+    top: '100%',
+    start: 0,
+    end: 0,
+    height: SCROLL_FADE,
   },
   // The side columns hold their content plus whatever padding the opposite side
   // needs to match them (`sideWidth` above), and never grow beyond it. They used
@@ -757,6 +918,25 @@ const styles = StyleSheet.create({
   titleStart: {
     textAlign: 'auto',
   },
+  // The box the sweep runs in. It stands between the row and the title, so it
+  // is what carries the title's `flex: 1` now — a shrink-to-fit box here would
+  // measure the name at its longest WORD and wrap it with half the row empty
+  // beside it, exactly as the note on `title` describes. It clips, so the band
+  // never shows outside the name it is passing over.
+  titleSweepWrap: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  // The band itself: as tall as the title, as wide as TITLE_SWEEP_BAND of it,
+  // and moved by a transform. `left: 0` and never a measured offset — an
+  // absolute box is laid out in `parentWidth - left`, so a left computed from
+  // the band's own width would feed back into that width.
+  titleSweep: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+  },
   trailingSpacer: {
     width: ROUND_BUTTON_SIZE_SM,
   },
@@ -776,33 +956,10 @@ const styles = StyleSheet.create({
   // stated here rather than left to an alignment the row does not make.
   handleWrap: {
     flex: 1,
-    height: ROUND_BUTTON_SIZE_SM,
+    // Its own tight line, not the chrome circle a title or an X stands on —
+    // see HANDLE_LINE. The row's minHeight still holds the drag band open.
+    height: HANDLE_LINE,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  // HALF-STRENGTH, all of it (user directive 2026-08-02): the band is there to
-  // hold the handle legible, not to be a surface, and at full PAGE it read as a
-  // bar of chrome pasted over the top of the conversation. Stated ONCE, on the
-  // box, so the solid part and its fade can never disagree about the strength
-  // they start from.
-  handleBandBox: {
-    position: 'absolute',
-    top: 0,
-    start: 0,
-    end: 0,
-    opacity: HANDLE_BAND_ALPHA,
-  },
-  handleBand: {
-    flex: 1,
-    backgroundColor: PAGE,
-  },
-  // Hung off the bottom EDGE of that box rather than measured against it, which
-  // is what keeps the pair honest at any header height and font scale.
-  handleBandFade: {
-    position: 'absolute',
-    top: '100%',
-    start: 0,
-    end: 0,
-    height: HANDLE_BAND_FADE,
   },
 })

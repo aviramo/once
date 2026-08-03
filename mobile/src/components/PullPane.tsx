@@ -19,49 +19,89 @@
 //   PullPane                               — the framed element that renders it
 
 import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Dimensions, findNodeHandle, type ScrollViewProps, type NativeSyntheticEvent, type NativeScrollEvent, type StyleProp, type ViewStyle } from 'react-native'
+import { View, StyleSheet, Dimensions, Keyboard, type ScrollViewProps, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native'
 import { Gesture, GestureDetector, ScrollView, type GestureType, type ComposedGesture } from 'react-native-gesture-handler'
 import type { NativeViewGestureHandlerProps } from 'react-native-gesture-handler'
 import Animated, {
-  useSharedValue, useAnimatedStyle, useAnimatedReaction, useAnimatedRef, withTiming, withSpring, withSequence, withDelay,
+  useSharedValue, useAnimatedStyle, useAnimatedProps, useAnimatedRef, useDerivedValue, scrollTo, withTiming, withSpring, withSequence, withDelay,
   Easing, runOnJS, type SharedValue,
 } from 'react-native-reanimated'
-import { I18nManager } from 'react-native'
 import {
   PULL_COMMIT_FRACTION, PULL_CLOSE_FRACTION, PULL_SNAP_SPRING, SWIPE_DISMISS_VELOCITY, SCROLL_AT_TOP_PX,
   PULL_TUTORIAL_START_DELAY_MS, PULL_TUTORIAL_HOLD_MS,
 } from '../tokens'
 import { hasSeenFlag, markSeenFlag } from '../lib/seenFlags'
-import { useKeyboardReveal } from '../hooks/useKeyboard'
 
-/** Which way a surface is dragged away.
- *  'y' — down, off the bottom. Every card surface and every sheet.
- *  'x' — sideways, off the START edge (left in LTR, right in RTL). The menu
- *        drawer only: it enters from that edge, so it must leave by it. */
-export type PullAxis = 'y' | 'x'
+// (`PullAxis` stood here — 'y' | 'x'. A surface leaves DOWNWARD, and that is
+// the only direction there is: the sideways drawer was the one 'x' call site
+// and was deleted 2026-07-30, leaving an axis nothing asked for threaded
+// through the gesture, the transform, the entrance and the header's glyph. It
+// is gone with the rest of the merge, 2026-08-03.)
 
 // The motion a COMMITTED pull rides off on. Ease-OUT (fast start) so the
 // surface continues the finger's travel instead of easing in from a dead stop
 // — a release that pauses before the slide is exactly what reads as a stutter.
-// One object, shared by the gesture's onEnd (both activations) and the
-// programmatic `commit`, so a button and a swipe can never drift apart.
+// One object, shared by the gesture's onEnd and the programmatic `commit`, so a
+// button and a swipe can never drift apart.
 const RIDE_OFF = { easing: Easing.out(Easing.cubic) } as const
 
-// A horizontal surface closes toward the START edge, so its translateX is
-// negative in LTR and positive in RTL. Declared once, here, because this is the
-// only place that turns the drag magnitude back into a direction.
-const AXIS_X_SIGN = I18nManager.isRTL ? 1 : -1
-/** The opposite direction: inward from the START edge, i.e. the way the menu
- *  drawer is dragged OPEN (home.tsx's edge grab). Derived from the closing sign
- *  rather than re-deriving `isRTL`, so the two can never disagree. */
-export const AXIS_X_OPEN_SIGN = -AXIS_X_SIGN
-
 // ── Context for pull gesture ─────────────────────────────────────────────────
+
+/** WHAT THE INNER SCROLL CAN STILL GIVE — stated as the scroll's own geometry,
+ *  never as a verdict somebody computed and sent.
+ *
+ *  This replaced a boolean (`scrollAtTop`) that six different places had to
+ *  remember to keep true: five listeners in PullScrollView each correcting
+ *  another's report, a seed on every sheet open, a bespoke box measurement in
+ *  chat, and a hand-off between stacked Circles layers. Every swipe bug of
+ *  2026-08-03 was that bookkeeping being wrong rather than the gesture being
+ *  wrong — a measurement taken from the wrong event, a seed landing on top of a
+ *  report, a report that never came because a short list fires no events.
+ *
+ *  Geometry cannot be out of date in that way: these are the numbers the scroll
+ *  itself last stated about itself, and the question ("has it nothing left to
+ *  give a downward finger?") is asked where the answer is used — inside the
+ *  gesture's own worklet, on the frame it decides. Nothing to seed, nothing to
+ *  re-assert, nothing to hand over. */
+export type ScrollReach = {
+  /** The scroll's current offset. */
+  offset: SharedValue<number>
+  /** The largest offset its content allows: contentH - layoutH, floored at 0.
+   *  Zero means the content fits, i.e. there is nothing to scroll at all. */
+  max: SharedValue<number>
+  /** The list is upside down (chat's message list, the app's only one), so a
+   *  DOWNWARD finger runs its offset UP and "nothing left" is the far end. */
+  inverted: SharedValue<boolean>
+  /** A scroll surface has claimed this pull. False = the body cannot scroll at
+   *  all (a plain sheet, a card), so the pull is free to take every drag. */
+  present: SharedValue<boolean>
+}
+
+/** Has the inner scroll nothing left to give a DOWNWARD drag? The one place
+ *  this is decided, read straight off the geometry above. */
+export function scrollExhausted(reach: ScrollReach): boolean {
+  'worklet'
+  if (!reach.present.value) return true
+  return reach.inverted.value
+    ? reach.offset.value >= reach.max.value - SCROLL_AT_TOP_PX
+    : reach.offset.value <= SCROLL_AT_TOP_PX
+}
+
+/** One reach per pull. Built here so a surface with no scrolling body still has
+ *  something to answer with — `present: false`, i.e. nothing to compete with. */
+export function useScrollReach(): ScrollReach {
+  const offset = useSharedValue(0)
+  const max = useSharedValue(0)
+  const inverted = useSharedValue(false)
+  const present = useSharedValue(false)
+  return useMemo(() => ({ offset, max, inverted, present }), [offset, max, inverted, present])
+}
 
 export type PullCtx = {
   panRef: React.MutableRefObject<GestureType | undefined>
   extraRefs: React.MutableRefObject<GestureType | undefined>[]
-  setScrollAtTop: (v: boolean) => void
+  /** The scroll inside this surface reports its geometry here. */
+  reach: ScrollReach
   // UI-thread flag, true while the pull pan is actively engaged in a drag.
   // THE single "a pull is happening" signal (see PullScrollView / MatchCard).
   //
@@ -69,9 +109,10 @@ export type PullCtx = {
   // down from the surface. A `pulling` prop had to re-render the whole page —
   // its header, its lists, every row — on the very frame the drag engaged and
   // again on release, and that commit landing on top of a running gesture is
-  // what made a swipe-close stutter. Only PullScrollView, the one component
-  // that must actually change a native prop, turns this back into state, and
-  // its children are untouched elements so nothing below it re-renders.
+  // what made a swipe-close stutter. NOTHING turns it back into state any more:
+  // PullScrollView was the one component that did, to drop `scrollEnabled`, and
+  // that native prop change committed mid-touch is what jolted a swipe-down on
+  // iOS (see the pin there). It holds its offset from the UI thread instead.
   pullEngaged: SharedValue<boolean>
   // Live pull offset (the card's translateY). The inner scroll pin worklet
   // reads it purely so Reanimated re-runs that worklet on every frame of a
@@ -80,131 +121,133 @@ export type PullCtx = {
 }
 export const PullContext = createContext<PullCtx | null>(null)
 
-/** ScrollView that negotiates with the card's pull gesture.
+/** ScrollView that negotiates with the surface's pull gesture.
  *  - simultaneousHandlers: lets scroll and pan coexist while idle.
- *  - scrollEnabled is dropped while the pan is engaged in a pull, so a finger
- *    that reverses upward mid-pull brings the card back instead of leaving it
- *    stuck while the inner content scrolls.
- *  - updates scrollAtTop state so Pan enables/disables accordingly */
-export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestureHandlerProps>(
+ *  - the content is PINNED where it stood while the pan is engaged in a pull, so
+ *    a finger that reverses upward mid-pull brings the surface back instead of
+ *    leaving it stuck while the inner content scrolls. From the UI thread, never
+ *    by dropping `scrollEnabled` — see the pin.
+ *  - reports its own GEOMETRY into the pull's ScrollReach. See that type: it
+ *    states where the scroll is, never whether the pull may have the drag. */
+export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestureHandlerProps & {
+  /** The list is upside down (chat's message list, the app's only one). */
+  inverted?: boolean
+}>(
   (props, ref) => {
     const ctx = useContext(PullContext)
-    const {
-      onScroll, onScrollBeginDrag, onScrollEndDrag,
-      onMomentumScrollBegin, onMomentumScrollEnd, onContentSizeChange, scrollEnabled, ...rest
-    } = props
+    const { onScroll, onContentSizeChange, onLayout, inverted, scrollEnabled, ...rest } = props
     // Our own handle on the scroll, alongside whatever the caller asked for:
-    // shrinking the page for the keyboard is only half the job, and the other
-    // half (below) has to be able to move the content — from a worklet, every
-    // frame, which is what makes it one motion with the keyboard rather than a
-    // correction after it. Hence an animated ref and a shared-value offset.
+    // the pull's pin drives it from a worklet, every frame. Hence an animated
+    // ref and a shared-value offset.
     const scrollRef = useAnimatedRef<any>()
     const scrollOffsetSV = useSharedValue(0)
-    const scrollTagSV = useSharedValue<number | null>(null)
     const setRef = useCallback((node: any) => {
       scrollRef(node)
-      scrollTagSV.value = node ? findNodeHandle(node) : null
       if (typeof ref === 'function') ref(node)
       else if (ref) (ref as React.MutableRefObject<any>).current = node
-    }, [ref, scrollRef, scrollTagSV])
-    // A freshly-mounted ScrollView is always at offset 0. `onScroll` does NOT
-    // fire for that initial position, and a programmatic scrollTo on a card
-    // swap doesn't reliably fire it either — so without this the pull
-    // gesture's `scrollAtTop` flag could keep a stale `false` carried over
-    // from a previous card the user had scrolled down. That left the new card
-    // un-pullable until the user manually scrolled down and back up to make
-    // `onScroll` fire (`scrollOnly` latched in the pan's onStart). Assert
-    // at-top on mount so every new card is pullable immediately.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { ctx?.setScrollAtTop(true) }, [])
-    // Last offset the scroll actually reported, kept even through momentum: it
-    // is the only truth available when the CONTENT changes under the list (see
-    // handleContentSizeChange), which fires no scroll event of its own.
-    const lastOffset = useRef(0)
-    // THE app-wide "keep the field you are typing in on screen" behaviour, wired
-    // here for the same reason `keyboardDismissMode` is: this is the only scroll
-    // surface in the app, so declaring it once here covers every list and form.
-    // The page shrinking to the keyboard cannot do this on its own — a field low
-    // on the page ends up below the fold of the shorter page, and only the
-    // content moving brings it back.
-    useKeyboardReveal(scrollRef, scrollOffsetSV, scrollTagSV)
-    // `scrollAtTop` gates the card's pull-to-skip gesture. `onScroll` is
-    // throttled, so the LAST event before the content settles can land a few
-    // px short of 0 and leave the flag stuck `false` — the card then silently
-    // refuses to pull until the user scrolls again. onScrollEndDrag (finger
-    // lifted) and onMomentumScrollEnd (momentum settled) report the definitive
-    // resting offset, so the flag is always corrected once a scroll truly ends.
-    const syncAtTop = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      ctx?.setScrollAtTop(e.nativeEvent.contentOffset.y < SCROLL_AT_TOP_PX)
-    }
-    // A scroll that is still FLYING is not "at the top", even for the frames
-    // where it passes offset 0 (user directive 2026-07-27: flinging the list
-    // back up must never hand the surface to the dismiss pan). The finger that
-    // catches a flick lands mid-momentum, and the pan latches its decision at
-    // touch-down — so the flag has to stay false for the whole ride and only
-    // tell the truth once the list has come to rest.
-    const momentum = useRef(false)
-    const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      lastOffset.current = e.nativeEvent.contentOffset.y
-      // Same number, on the UI thread, for the keyboard ride to start from.
-      scrollOffsetSV.value = lastOffset.current
-      if (!momentum.current) syncAtTop(e)
+    }, [ref, scrollRef])
+    // NO KEYBOARD REVEAL. This used to carry the app-wide "keep the field you
+    // are typing in on screen" ride (`useKeyboardReveal`), which scrolled the
+    // surface under the focused field as the keyboard came up. It is DELETED
+    // (user directive 2026-08-03): the page shrinking to the keyboard is the
+    // whole of what the app does about a keyboard, and a page that also moved
+    // itself under the finger read as the field playing with the scroll. A
+    // field low on a shorter page is reached by scrolling to it — which is
+    // always allowed, since scrolling never ends an edit.
+
+    // ── Reporting the geometry ────────────────────────────────────────────
+    // THIS SCROLL IS THE ONE THE PULL IS COMPETING WITH, for as long as it is
+    // mounted. Claimed here rather than seeded by the surface, so a body that
+    // scrolls and one that cannot are told apart by what is actually on screen.
+    const reach = ctx?.reach
+    // The two halves of "how far can it go" arrive in separate events, so each
+    // is kept and `max` is recomputed from the pair. Refs, not state: geometry
+    // moving must never re-render a page.
+    const layoutH = useRef(0)
+    const contentH = useRef(0)
+    const publish = useCallback(() => {
+      if (!reach) return
+      reach.max.value = Math.max(0, contentH.current - layoutH.current)
+      reach.present.value = true
+    }, [reach])
+    useEffect(() => {
+      if (!reach) return
+      // Until it has measured, a scroll has nothing to give: max 0 at offset 0
+      // is "the content fits", which is also the honest reading of a list that
+      // has not laid out yet — and it is the SAFE one, since it hands the drag
+      // to the pull rather than to a scroll that cannot move.
+      reach.present.value = true
+      reach.offset.value = 0
+      reach.max.value = 0
+      return () => { reach.present.value = false }
+    }, [reach])
+    useEffect(() => {
+      if (reach) reach.inverted.value = !!inverted
+    }, [reach, inverted])
+    // One listener. A scroll event carries all three numbers at once, which is
+    // why the five that stood here — begin-drag, end-drag, momentum begin,
+    // momentum end, content-size — are gone along with the momentum latch they
+    // existed to repair: there is no verdict left to be stale, so there is
+    // nothing to correct after the fact.
+    const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const ne = e.nativeEvent
+      scrollOffsetSV.value = ne.contentOffset.y
+      if (reach) {
+        reach.offset.value = ne.contentOffset.y
+        if (ne.layoutMeasurement) layoutH.current = ne.layoutMeasurement.height
+        if (ne.contentSize) contentH.current = ne.contentSize.height
+        publish()
+      }
       onScroll?.(e)
-    }
-    // The list became a DIFFERENT list — a roster landing from the server, a
-    // page of results appended, a card's photos measuring. RN fires no scroll
-    // event for the offset the content settles at, so this is the one moment a
-    // stale flag can be corrected, and it must be: a `momentum` that never got
-    // its matching onMomentumScrollEnd (Android drops it often enough) leaves
-    // the at-top flag latched `false` for the rest of the surface's life, and a
-    // surface whose only drag band is that flag — a floating-header page, which
-    // has no title bar to grab — can then never be swiped closed again. The
-    // refresh is what unsticks it: momentum is over by definition once the
-    // content underneath it changed, and the last reported offset is the
-    // resting truth.
-    const handleContentSizeChange = (w: number, h: number) => {
-      momentum.current = false
-      ctx?.setScrollAtTop(lastOffset.current < SCROLL_AT_TOP_PX)
+    }, [onScroll, publish, reach, scrollOffsetSV])
+    // Measured on the SCROLL VIEW ITSELF and never on a list wrapped around it:
+    // a FlatList hands the onLayout it is given to more than its own box, and
+    // the inner one — reported as a 222dp box holding 835dp of content — is what
+    // made chat's swipe-close refuse for the rest of its life (2026-08-03).
+    const handleLayout = useCallback((e: LayoutChangeEvent) => {
+      layoutH.current = e.nativeEvent.layout.height
+      publish()
+      onLayout?.(e)
+    }, [onLayout, publish])
+    const handleContentSizeChange = useCallback((w: number, h: number) => {
+      contentH.current = h
+      publish()
       onContentSizeChange?.(w, h)
-    }
-    const handleMomentumScrollBegin = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      momentum.current = true
-      ctx?.setScrollAtTop(false)
-      onMomentumScrollBegin?.(e)
-    }
-    const handleScrollBeginDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      // A finger on the list cancels any momentum; from here the drag's own
-      // scroll events carry the truth again.
-      momentum.current = false
-      onScrollBeginDrag?.(e)
-    }
-    const handleScrollEndDrag = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      syncAtTop(e)
-      onScrollEndDrag?.(e)
-    }
-    const handleMomentumScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      momentum.current = false
-      syncAtTop(e)
-      onMomentumScrollEnd?.(e)
-    }
-    // The inner scroll is dropped for as long as the pull pan is engaged, so a
+    }, [onContentSizeChange, publish])
+
+    // THE CONTENT IS HELD WHERE IT WAS FOR AS LONG AS THE PULL IS ENGAGED, so a
     // finger that reverses upward mid-pull brings the surface back instead of
     // leaving it stuck while the content scrolls under it.
     //
-    // The flag is derived HERE, from the context's shared value, rather than
-    // handed down as a React boolean: this component is the only one that needs
-    // to re-render for it, and its children are the very same elements it was
-    // given, so React bails out on the whole subtree. That is what keeps the
-    // page still while a swipe-close is being dragged.
+    // IT IS A PIN ON THE UI THREAD, NEVER A `scrollEnabled` FLIP (user report,
+    // iPhone 2026-08-03: a swipe-down on the profile preview rose a little way
+    // back up a few frames in, then carried on following the finger). Dropping
+    // `scrollEnabled` is a NATIVE PROP CHANGE COMMITTED MID-TOUCH, and on iOS
+    // setting `scrollEnabled = NO` on a scroll view that is currently tracking
+    // cancels the touch it is tracking — which cancels the pan running
+    // simultaneously with it. A cancelled pan is `onFinalize`, i.e. the
+    // velocity-seeded spring back to rest; the very next touch event starts a
+    // fresh pan that picks the finger up again, so the surface springs UP for a
+    // few frames and then resumes the drag. Nothing was wrong with the pull, and
+    // nothing about it was visible in the gesture: the JOLT WAS THE RE-RENDER.
+    //
+    // So the offset is simply held, from the UI thread, at whatever it was when
+    // the pull took over — which is what MatchCard's own reel already does for
+    // the same reason, and which no longer costs this component (the app's one
+    // scroll wrapper) a render per drag. `pullY` is read for its frames: a
+    // derived value re-runs when what it reads changes, and the hold has to be
+    // re-asserted on every frame of the drag, not once at the start.
     const idle = useSharedValue(false)
     const engaged = ctx?.pullEngaged ?? idle
-    const [locked, setLocked] = useState(false)
-    useAnimatedReaction(
-      () => engaged.value,
-      (v, prev) => { if (v !== prev) runOnJS(setLocked)(v) },
-      [engaged],
-    )
-    const effectiveScrollEnabled = locked ? false : scrollEnabled
+    const pullY = ctx?.pullY
+    // -1 = not holding. Seeded on the first engaged frame, cleared on release.
+    const holdAt = useSharedValue(-1)
+    useDerivedValue(() => {
+      void pullY?.value
+      if (!engaged.value) { holdAt.value = -1; return }
+      if (holdAt.value < 0) holdAt.value = scrollOffsetSV.value
+      scrollTo(scrollRef, 0, holdAt.value, false)
+    })
     return (
       <ScrollView
         // THE keyboard-dismissal rule for the whole app, declared HERE, once,
@@ -231,16 +274,16 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
         {...rest}
         ref={setRef}
         onScroll={handleScroll}
-        onScrollBeginDrag={handleScrollBeginDrag}
-        onScrollEndDrag={handleScrollEndDrag}
-        onMomentumScrollBegin={handleMomentumScrollBegin}
-        onMomentumScrollEnd={handleMomentumScrollEnd}
+        // The geometry must be fresh on the frame the gesture reads it, and RN's
+        // default is to report a scroll only when it ends.
+        scrollEventThrottle={16}
+        onLayout={handleLayout}
         onContentSizeChange={handleContentSizeChange}
         nestedScrollEnabled
         simultaneousHandlers={ctx ? [ctx.panRef, ...ctx.extraRefs].filter(r => r.current) : undefined}
         bounces={false}
         overScrollMode="never"
-        scrollEnabled={effectiveScrollEnabled}
+        scrollEnabled={scrollEnabled}
       />
     )
   }
@@ -265,7 +308,7 @@ export const PullScrollView = forwardRef<any, ScrollViewProps & NativeViewGestur
 export function PullPane({
   gesture,
   pullY,
-  axis = 'y',
+  leaving,
   topAnchor,
   style,
   pointerEvents,
@@ -284,8 +327,16 @@ export function PullPane({
    *  see home.tsx's menu drag, which must NOT add a second GestureDetector. */
   gesture: GestureType | ComposedGesture
   pullY: SharedValue<number>
-  /** Which way the surface travels. See PullAxis. */
-  axis?: PullAxis
+  /** A SURFACE THAT IS LEAVING IS ALREADY GONE, AS FAR AS THE FINGER IS
+   *  CONCERNED. The ride-off is an animation, not a state the user is in: the
+   *  decision was taken at the release, and for the whole of the fall this pane
+   *  still lay over the page underneath and swallowed every touch — so choosing
+   *  another circle straight after swiping one away did nothing until the old
+   *  page had finished landing. Handed the behaviour's own `leaving`, which is
+   *  true only while the surface is travelling out with no finger on it, so
+   *  nothing about a live drag is affected (the gesture lives INSIDE this pane
+   *  and must keep its touches for as long as the finger is on it). */
+  leaving?: SharedValue<boolean>
   topAnchor?: SharedValue<number>
   style?: StyleProp<ViewStyle>
   pointerEvents?: 'box-none' | 'none' | 'auto' | 'box-only'
@@ -303,28 +354,47 @@ export function PullPane({
   cardStatic?: boolean
   children?: React.ReactNode
 }) {
+  // The pane's own resting policy is the caller's (`box-none` for a sheet, so
+  // its siblings stay reachable). Riding off overrides it and nothing else does
+  // — stated in the STYLE rather than the prop so it can be written from the UI
+  // thread: a React re-render on the frame a commit lands is the very stutter
+  // the engaged flag exists to avoid.
+  const restingPointerEvents = pointerEvents ?? 'auto'
   const outerTopStyle = useAnimatedStyle(() => ({
     top: topAnchor ? topAnchor.value : 0,
   }))
-  // `pullY` is the drag MAGNITUDE along the axis, always >= 0 in the closing
-  // direction. Only this transform knows which physical direction that is, so
-  // the gesture and every consumer stay direction-agnostic.
-  // Clamped at 0 because `pullY` is a magnitude in the CLOSING direction and a
-  // surface never travels the other way: the velocity-seeded snap-back spring
-  // can undershoot past rest when a fast drag is released back toward it, and
-  // an overshoot here would lift a full-screen sheet off its own edge and flash
-  // whatever sits behind it.
-  const cardTranslate = useAnimatedStyle(() => {
-    const travel = Math.max(0, pullY.value)
-    return axis === 'x'
-      ? { transform: [{ translateX: travel * AXIS_X_SIGN }] }
-      : { transform: [{ translateY: travel }] }
-  })
+  // As a PROP, not a style key: `pointerEvents` in a style is accepted by the
+  // types and silently never reaches the native view from a worklet — the pane
+  // went on swallowing every touch for the whole of its fall, which is the
+  // "I tapped while the old page was coming down and nothing happened" (the
+  // stack log showed each push landing only AFTER the pop).
+  const outerPointerEvents = useAnimatedProps(() => ({
+    pointerEvents: (leaving?.value ? 'none' : restingPointerEvents) as 'none' | 'auto' | 'box-none' | 'box-only',
+  }))
+  // `pullY` is the drag MAGNITUDE, always >= 0: the surface travels DOWN and
+  // there is no other direction. Clamped at 0 because the velocity-seeded
+  // snap-back spring can undershoot past rest when a fast drag is released back
+  // toward it, and an overshoot would lift a full-screen sheet off its own top
+  // edge and flash whatever sits behind it.
+  const cardTranslate = useAnimatedStyle(() => ({
+    transform: [{ translateY: Math.max(0, pullY.value) }],
+  }))
+  // AN EMPTY PULL SURFACE IS NOT A SURFACE, AND MAY NOT TAKE A SINGLE TOUCH.
+  // The card wrapper is `flex: 1` and carries the pan, so with no children it
+  // is a full-pane, invisible, perfectly interactive sheet of nothing — and it
+  // is rendered OVER whatever the host put behind it. That is what ate home's
+  // centre PAUSE button while page1 was `watching` with its card not on screen
+  // (a skip mid-flight, a promote the pause aborted): the tap landed on this,
+  // so the button did not even flash its press state, let alone stop the
+  // search. The host's own `pointerEvents` is on the OUTER view and cannot
+  // reach in here. Nothing to drag, nothing to press: 'none'.
+  const empty = children === null || children === undefined || children === false
   const card = (
     <GestureDetector gesture={gesture}>
       <Animated.View
         style={[pullPaneStyles.card, cardStyle, cardStatic ? undefined : cardTranslate]}
         collapsable={false}
+        pointerEvents={empty ? 'none' : undefined}
       >
         {children}
       </Animated.View>
@@ -336,6 +406,7 @@ export function PullPane({
       // its own overlay style. `outerTopStyle` applies the topAnchor offset
       // (0 unless provided).
       style={[style ?? StyleSheet.absoluteFill, outerTopStyle]}
+      animatedProps={outerPointerEvents}
       pointerEvents={pointerEvents}
     >
       {/* Static next-stack card, pinned at rest BELOW the wake + the
@@ -368,13 +439,13 @@ const pullPaneStyles = StyleSheet.create({
 
 // page1 and the invite overlay each need their OWN PullContext value — the two
 // can be mounted at once (an invite arriving while page1 is watching), and a
-// context binds a specific panRef + scrollAtTop flag + engaged flag, none
+// context binds a specific panRef + scroll reach + engaged flag, none
 // of which are safe to alias across two GestureDetector trees. They can't be
 // one instance, but the *shape* is identical, so the construction lives here
 // once instead of being hand-rolled per surface.
 export function usePullCtx(
   panRef: React.MutableRefObject<GestureType | undefined>,
-  scrollAtTopSV: SharedValue<boolean>,
+  reach: ScrollReach,
   engaged: SharedValue<boolean>,
   pullY: SharedValue<number>,
 ): PullCtx {
@@ -382,9 +453,7 @@ export function usePullCtx(
     () => ({
       panRef,
       extraRefs: [],
-      setScrollAtTop: (v: boolean) => {
-        scrollAtTopSV.value = v
-      },
+      reach,
       pullEngaged: engaged,
       pullY,
     }),
@@ -400,19 +469,18 @@ export function usePullCtx(
 //
 // THE single source of "pull a surface down" behaviour. It owns everything
 // that would otherwise be hand-rolled per screen:
-//   • the drag shared value + the `pullEngaged` engage/disengage flag (and,
-//     for 'scrollPan' only, its JS-thread `pulling` mirror — see PullBehavior);
-//   • the Pan gesture itself — two activation strategies:
-//       'scrollPan' = a card surface (page1 skip / invite decline; uses
-//                     PullContext so the card's inner scroll locks);
-//       'sheet'     = an overlay sheet (manualActivation + header-vs-scroll
-//                     touch arbitration, no PullContext);
-//   • tracking: BOTH activations are 1:1 — the surface follows the finger
-//     exactly, NO resistance (user: "the card slides directly with the
-//     finger"). What differs is only the commit GATE, and that is the
-//     `weight`'s, not the activation's: a 'decide' pull needs half the screen
-//     and ignores speed, a 'close' pull needs a fifth of it or a flick. See
-//     PullWeight;
+//   • the drag shared value + the `pullEngaged` engage/disengage flag (and, for
+//     the one caller that asks, its JS-thread `pulling` mirror — see
+//     PullBehavior);
+//   • the Pan gesture itself — ONE strategy for every surface in the app
+//     (user directive 2026-08-03): manualActivation, the inner scroll first and
+//     the surface picked up mid-gesture where that scroll runs out, plus a
+//     PullContext so the two can find each other;
+//   • tracking is 1:1 — the surface follows the finger exactly, NO resistance
+//     (user: "the card slides directly with the finger"). The only thing that
+//     differs between surfaces is the commit GATE, and that is the `weight`'s:
+//     a 'decide' pull needs half the screen and ignores speed, a 'close' pull a
+//     tenth of it or a flick. See PullWeight;
 //   • what crossing the commit threshold DOES, via `commit`:
 //       'slideOff' (default) = ride the surface off-screen, then onCommit.
 //                              The surface is going away (skip / close).
@@ -420,73 +488,92 @@ export function usePullCtx(
 //                              surface stays; onCommit is a *request* whose
 //                              handler decides (the invite's decline confirm
 //                              dialog opens over a card that springs home).
-//     'snapBack' deliberately never latches `slidOut`, so the promote/unmount
-//     reactions that watch it don't fire for a request that may be cancelled;
+//     'snapBack' never travels far enough to read as `leaving`, so the
+//     promote/unmount reactions don't fire for a request that may be cancelled;
 //   • the snap-back animation when released short of commit;
 //   • the first-time tutorial: the peek->hold->return choreography AND its
 //     once-ever trigger policy (seenFlags gate + post-mount delay), exposing
 //     `tutorialPlaying` so the frame can lock input while it plays.
 // Each <PullPane> call site calls this once, so simultaneously-mountable
 // surfaces still get independent instances (see usePullCtx).
-export type PullActivation = 'scrollPan' | 'sheet'
+// (`PullActivation` stood here — 'scrollPan' | 'sheet'. THERE IS ONE
+// ARBITRATION NOW, and it is the sheet's (user directive 2026-08-03: "one
+// mechanism for all of them, based on what works in a circle page"). See the
+// gesture below for what the second one did and why nothing wants it.)
 export type PullCommit = 'slideOff' | 'snapBack'
 /** WHAT LETTING GO DOES, which is the only thing that decides how far the
  *  finger must travel and whether speed counts.
  *
- *  'close'  (default) — the surface goes away and nothing else happens. A fifth
- *           of the screen, or a flick. Every sheet, every Circles page, chat.
+ *  'close'  (default) — the surface goes away, or asks a cancellable question,
+ *           and nothing is answered by the release itself. A TENTH of the
+ *           screen, or a flick. Every sheet (the invitation included), every
+ *           Circles page, chat, and every state of home's card but the skip.
  *           Putting a page away is reversible, so it costs what putting a
- *           popup away costs; anything dearer reads as the swipe not working.
- *  'decide' — the pull answers something about the person on the card (page1's
- *           skip, the invitation's decline). HALF the screen and NO flick, so
- *           a fast swipe that did not pass the half never decides anything.
+ *           popup away costs; anything dearer reads as the surface insisting on
+ *           springing back rather than as a guard (user report 2026-08-03).
+ *  'decide' — THE ONE CALL SITE: page1's WATCHING card, whose release ignores
+ *           this person and draws another with no dialog in between. HALF the
+ *           screen and NO flick, so a fast swipe that did not pass the half
+ *           never decides anything. Nothing else in the app may state it.
  *
- *  Deliberately not derived from `activation` or `commit`: page1's skip is a
- *  'slideOff' that decides, and a Circles profile page is a 'scrollPan' that
- *  only closes. Only the call site knows which of the two its pull is. */
+ *  Deliberately not derived from `commit`: page1's skip is a 'slideOff' that
+ *  decides and a card that is over is a 'slideOff' that only closes, while the
+ *  invitation's 'snapBack' merely ASKS. Only the call site knows which of the
+ *  two its pull is. */
 export type PullWeight = 'close' | 'decide'
 export type PullBehavior = {
   gesture: GestureType
   pullY: SharedValue<number>
   /** JS-thread mirror of `pullEngaged`, for a consumer that genuinely needs a
    *  RENDER when a drag starts or ends — page1's name-slide choreography is the
-   *  only one. It is maintained for 'scrollPan' ONLY: a sheet drag must never
-   *  re-render its page mid-gesture (see PullCtx.pullEngaged). Anything that
-   *  merely needs to KNOW should read `pullEngaged` from a worklet instead. */
+   *  only one, and it is the only caller that may ask for it (`reportPulling`).
+   *  Nothing else may: a drag must never re-render the surface it is dragging
+   *  (see PullCtx.pullEngaged). Anything that merely needs to KNOW should read
+   *  `pullEngaged` from a worklet instead. */
   pulling: boolean
   /** True on the UI thread for the length of a drag. THE signal to share. */
   pullEngaged: SharedValue<boolean>
-  pullCtx: PullCtx | undefined
+  /** Always present: every surface's inner scroll and its pull have to be able
+   *  to find each other. It used to be handed out for one activation only. */
+  pullCtx: PullCtx
   panRef: React.MutableRefObject<GestureType | undefined>
-  setScrollAtTop: (v: boolean) => void
+  /** The geometry of whatever scroll is competing with this pull. A body that
+   *  scrolls reports into it (PullScrollView); a surface with no scroll leaves
+   *  it empty, which reads as "nothing can take this drag but me". */
+  reach: ScrollReach
+  /** ARMED. False suspends the pull entirely for as long as it is false — the
+   *  chat lightbox, whose one-finger drag pans a ZOOMED image instead of
+   *  closing it. Deliberately not part of `reach`: it is not a fact about a
+   *  scroll, it is the surface saying the drag is spoken for. */
+  armed: SharedValue<boolean>
   reset: () => void
   // Programmatic ride-off skip (button parity with the swipe). See usage.
   commit: () => void
   tutorialPlaying: boolean
   // The single commit distance (px) every consumer must share.
   commitDistance: number
-  // Full travel along the axis — the pullY at which the surface is entirely
+  // Full travel — the pullY at which the surface is entirely
   // off-screen. A host that drags the surface IN (the menu drawer's opening
   // pan) needs it as the starting offset; taking it from here keeps one
   // definition of "gone" for both directions.
   screenSpan: number
-  // True ONLY once a release committed and the surface is riding off-screen
-  // (set in onEnd, cleared on the next onStart). Never set by 'snapBack'.
-  slidOut: SharedValue<boolean>
+  /** THE SURFACE IS ON ITS WAY OUT: past the commit gate with no finger on it.
+   *  Derived every frame from the drag itself, so it cannot be left set — see
+   *  the note at its declaration. A 'snapBack' never reaches it. */
+  leaving: SharedValue<boolean>
 }
 // Threshold + flick are object-owned constants (PULL_COMMIT_FRACTION,
 // SWIPE_DISMISS_VELOCITY) so no caller can desync them.
 export function usePullBehavior(opts: {
-  activation: PullActivation
   enabled: boolean
   onCommit: () => void
   /** What crossing the threshold does. Defaults to 'slideOff'. */
   commit?: PullCommit
   /** What letting go MEANS. Defaults to 'close'. See PullWeight. */
   weight?: PullWeight
-  /** Which way the surface is dragged away. Defaults to 'y'. 'x' is only
-   *  meaningful with activation 'sheet' (the menu drawer). */
-  axis?: PullAxis
+  /** Maintain the JS-thread `pulling` mirror. ONE caller (page1's name-slide);
+   *  see PullBehavior.pulling. */
+  reportPulling?: boolean
   /** Bottom edge (window Y) of the band a drag may start in and take the
    *  surface from, whatever the inner scroll is doing.
    *
@@ -500,11 +587,11 @@ export function usePullBehavior(opts: {
   headerBottom?: SharedValue<number>
   tutorial?: { ready: boolean; seenFlag: string; peek?: SharedValue<number> }
 }): PullBehavior {
-  const { activation, enabled, onCommit, commit: commitMode = 'slideOff', weight = 'close', axis = 'y', headerBottom, tutorial } = opts
-  const { height: screenH, width: screenW } = Dimensions.get('window')
-  // The surface leaves along its own axis, so the travel it must cover to be
-  // gone (and the fraction of it that commits) is measured on that axis.
-  const screenSpan = axis === 'x' ? screenW : screenH
+  const { enabled, onCommit, commit: commitMode = 'slideOff', weight = 'close', headerBottom, reportPulling = false, tutorial } = opts
+  const { height: screenH } = Dimensions.get('window')
+  // The travel a surface must cover to be gone, and the fraction of it that
+  // commits: it leaves off the bottom, so both are measured down the screen.
+  const screenSpan = screenH
   // The gate is the WEIGHT's, never the activation's: how far a finger must
   // carry a surface, and whether a flick counts, is a question about what
   // letting go does — see PullWeight.
@@ -517,9 +604,8 @@ export function usePullBehavior(opts: {
   // event) can seed its spring with it and continue the finger's motion.
   const pullVelocity = useSharedValue(0)
   const engaged = useSharedValue(false)
-  const slidOut = useSharedValue(false)
-  const scrollOnly = useSharedValue(false)
-  const scrollAtTopSV = useSharedValue(true)
+  const reach = useScrollReach()
+  const armed = useSharedValue(true)
   const swipeStart = useSharedValue({ x: 0, y: 0 })
   // Sheet only: latched true once manualActivation fires, so onTouchesMove
   // stops re-arbitrating (and can't fail/cancel) mid-drag — the pan then
@@ -532,43 +618,65 @@ export function usePullBehavior(opts: {
   // 2026-07-27), so the two cannot be the same point: without this the pull
   // would open by everything the finger already spent on the list.
   const dragOrigin = useSharedValue({ x: 0, y: 0 })
+  /** How much of this touch's travel was spent before the PULL took over — the
+   *  inner scroll the finger ran to its top, plus whatever slop the arbitration
+   *  needed. Both activations charge it, so the card always opens from where
+   *  the finger IS and the commit gate always measures what the SURFACE moved. */
   const pullBase = useSharedValue(0)
   // Sheet only: does the inner scroll currently have nothing left to give
   // (at its top, or the touch landed on chrome that never scrolls)? Not a
   // touch-down latch: it flips both ways during a drag, and the frame it turns
   // ON is where the pull re-origins.
   const scrollSpent = useSharedValue(false)
+  // Sheet only: did the inner scroll take any of THIS touch's travel? It is the
+  // one thing that entitles the arbitration to move the pull's origin — see the
+  // re-origin in onTouchesMove. Cleared at touch-down, never latched across
+  // touches.
+  const scrollTook = useSharedValue(false)
   const [pulling, setPulling] = useState(false)
   const panRef = useRef<GestureType>(undefined as unknown as GestureType)
 
-  const setScrollAtTop = useCallback((v: boolean) => { scrollAtTopSV.value = v }, [scrollAtTopSV])
-  // Return the pull behavior fully to rest. Clearing `slidOut` is essential: a
-  // button skip (`commit`) latches it true to block a double-fire during the
-  // ride-off, but — unlike a swipe (gesture `onStart` resets it) — nothing else
-  // clears it. Without this the second "not now" tap hits the `commit` guard and
-  // no-ops; the button works exactly once. An overlay sheet ALSO calls this on
-  // every open: a 'slideOff' close leaves pullY parked at screenH, so a sheet
-  // that reopened without the reset would mount already translated off-screen.
-  const reset = useCallback(() => { pullY.value = 0; slidOut.value = false }, [pullY, slidOut])
+  // THE SURFACE IS LEAVING — DERIVED FROM THE MOTION, NEVER LATCHED (user
+  // directive 2026-08-03: "slidOut — I don't think it should be used"). It was a
+  // flag set at a committed release and cleared only by the NEXT touch-down, and
+  // the pane it drives takes no touches while it is true — so a pane that was
+  // left holding it could never be touched down on to clear it. That is a
+  // surface that has stopped answering the finger for good, and it is what the
+  // invitation did: it rides off, `onClose` posts, and the server writes a
+  // DIFFERENT page2 card into the same still-open sheet.
+  //
+  // The same fact read off the two values that already describe the drag: the
+  // surface is past the commit gate and NO finger is on it, i.e. it is moving on
+  // its own, away from rest. It cannot stick — the moment the surface is back at
+  // rest, or a finger owns it again, it is false by arithmetic — and it needs no
+  // clearing anywhere. A snap-back is excluded by construction: a release short
+  // of the gate never reaches this distance, and one past it committed.
+  const leaving = useDerivedValue(() => !engaged.value && pullY.value >= commitDistance)
+  // Return the pull behavior fully to rest. An overlay sheet calls it on every
+  // open: a committed close leaves pullY parked at screenSpan, so a sheet that
+  // reopened without the reset would mount already translated off-screen.
+  const reset = useCallback(() => { pullY.value = 0 }, [pullY])
   // Programmatic commit — the EXACT ride-off the gesture's onEnd performs
   // once the finger crossed commitDistance, so a BUTTON skips or closes with
   // the IDENTICAL motion as a swipe (user: "tapping the skip button must drop
   // the card like a swipe"; and 2026-07-27: a page closed by its back control
-  // must slide down as though the manual pull carried on). slidOut ⇒ the page1
-  // promote reaction fires when the ride reaches the bottom; onCommit runs the
+  // must slide down as though the manual pull carried on). onCommit runs the
   // skip / close itself.
-  // Guarded: enabled only, no-op while already sliding.
+  // Guarded: enabled only, no-op while the surface is already on its way out.
   const commit = useCallback(() => {
-    if (!enabled || slidOut.value) return
-    slidOut.value = true
+    if (!enabled || leaving.value) return
     pullY.value = withTiming(screenSpan, RIDE_OFF)
     onCommit()
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, onCommit, screenSpan])
 
-  // Called unconditionally (rules of hooks); only handed out for scrollPan.
-  const ctx = usePullCtx(panRef, scrollAtTopSV, engaged, pullY)
-  const pullCtx = activation === 'scrollPan' ? ctx : undefined
+  // EVERY surface gets one: the pull and whatever scrolls inside it have to be
+  // able to find each other, and a body that scrolls is now the ordinary case
+  // (a card's photo reel as much as a roster). It used to be handed out for
+  // 'scrollPan' alone, so a card under a SHEET reported nothing and shared no
+  // handler — the reel and the dismiss pan each took half the finger.
+  const pullCtx = usePullCtx(panRef, reach, engaged, pullY)
 
   // First-time tutorial: choreography + once-ever trigger.
   const [tutorialPlaying, setTutorialPlaying] = useState(false)
@@ -620,8 +728,27 @@ export function usePullBehavior(opts: {
 
   const gestureEnabled = enabled && !tutorialPlaying
 
+  // ONE GESTURE FOR EVERY SURFACE THAT IS DRAGGED AWAY (user directive
+  // 2026-08-03). A second strategy stood beside this one — 'scrollPan', an
+  // auto-activating pan (activeOffsetY / failOffsetX) that ZEROED `pullY` for as
+  // long as its body had anything left to scroll. It was the card surfaces'
+  // (page1, the invite, my own profile, a member's page) and it is what made
+  // them come down worse than a circle page: a drag on a card whose photo reel
+  // was not at its top moved nothing, and the finger had to lift and start
+  // again. This one hands the drag to the inner scroll first and picks it up
+  // MID-GESTURE the frame the scroll runs out, re-origined to where the finger
+  // IS — one drag scrolls the reel to its top and carries straight on into the
+  // pull. It also never claims a TAP: manualActivation only activates on a
+  // dy-dominant move past the slop, which is what let the card surfaces move
+  // over here at all (the old "the button doesn't work" bug).
+  // A NAMED JS CALLBACK, NEVER THE MODULE METHOD ITSELF. `runOnJS` serializes
+  // what it is handed, and RN's `Keyboard.dismiss` is a native-module binding,
+  // not a plain function: handing it over throws on the UI thread the frame the
+  // pull activates, which on Android is a hard CRASH — every page swiped down
+  // took the app with it (2026-08-03). Same rule as the note in CLAUDE.md about
+  // `runOnJS(console.log)`.
+  const dismissKeyboard = useCallback(() => { Keyboard.dismiss() }, [])
   const gesture = useMemo(() => {
-    if (activation === 'sheet') {
       return Gesture.Pan()
         .withRef(panRef)
         .enabled(gestureEnabled)
@@ -630,15 +757,9 @@ export function usePullBehavior(opts: {
           'worklet'
           activated.value = false
           scrollSpent.value = false
+          scrollTook.value = false
           pullBase.value = 0
-          // A new touch means the surface is still here, so any ride-off that
-          // was latched is over — whether it landed or was interrupted. The
-          // 'scrollPan' branch clears this in its onStart; without the same
-          // clear here a 'sheet' surface that latched `slidOut` and did NOT
-          // unmount (an interrupted ride, a commit whose pop never ran) keeps
-          // it forever, and `commit()`'s guard then silently no-ops — which is
-          // a close X that does nothing for the rest of the page's life.
-          slidOut.value = false
+          pullVelocity.value = 0
           const tch = e.allTouches[0]
           if (tch) {
             swipeStart.value = { x: tch.absoluteX, y: tch.absoluteY }
@@ -647,32 +768,13 @@ export function usePullBehavior(opts: {
         })
         .onTouchesMove((e, manager) => {
           'worklet'
+          if (!armed.value) return
           // Once we own the gesture, never re-arbitrate — onUpdate keeps
           // tracking the finger continuously (no mid-drag fail/snap-back
           // when the inner scroll momentarily reports not-at-top).
           if (activated.value) return
           const tch = e.allTouches[0]
           if (!tch) return
-          if (axis === 'x') {
-            // No scrollAtTop gate here: a horizontal drag never competes with
-            // a vertical scroll, so the body scrolls freely at any offset and
-            // only a sideways-dominant drag takes the surface.
-            const dx = tch.absoluteX - swipeStart.value.x
-            const dy = tch.absoluteY - swipeStart.value.y
-            if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return
-            const toward = dx * AXIS_X_SIGN
-            if (toward > 0 && Math.abs(dx) > Math.abs(dy) * 0.8) {
-              activated.value = true
-              // Start from where the finger IS. See the note in the vertical
-              // branch: without this the surface jumps by the whole activation
-              // slop the moment it takes over.
-              pullBase.value = toward
-              manager.activate()
-              return
-            }
-            manager.fail()
-            return
-          }
           // The order of the two surfaces is fixed and absolute: THE INNER
           // SCROLL ALWAYS WINS, and the page pull picks up only where the
           // scroll runs out (user directive 2026-07-27, restated as the rule).
@@ -681,22 +783,43 @@ export function usePullBehavior(opts: {
           // roster, scroll it to the top, and carry straight on into the pull
           // without ever lifting.
           const inHeader = headerBottom ? swipeStart.value.y <= headerBottom.value : false
-          const spent = inHeader || scrollAtTopSV.value
+          // THE QUESTION IS ASKED HERE, OF THE SCROLL ITSELF, ON THIS FRAME.
+          // A drag that started on chrome that cannot scroll (the header band)
+          // never had a competitor to begin with.
+          const spent = inHeader || scrollExhausted(reach)
           if (!spent) {
             // The list still has room, so this drag is ITS drag. Deliberately
             // NOT manager.fail(): a failed gesture never comes back, and this
             // one has to be able to take over the moment the list bottoms out
             // at its top.
             scrollSpent.value = false
+            scrollTook.value = true
             return
           }
           if (!scrollSpent.value) {
-            // The frame the scroll ran out. Re-origin here so the dominance
-            // test below measures the drag from where the list stopped, not
-            // from a touch-down that may be a whole roster away.
             scrollSpent.value = true
-            dragOrigin.value = { x: tch.absoluteX, y: tch.absoluteY }
-            return
+            // THE RE-ORIGIN IS CHARGED ONLY WHERE THE SCROLL ACTUALLY TOOK THE
+            // TRAVEL. It exists for one case — a finger that began halfway down
+            // a roster, scrolled it to the top and carried on — where measuring
+            // from touch-down would open the pull by a whole list's worth of
+            // drag. A finger that found the scroll already spent (`scrollTook`
+            // never set: at the top, or on chrome that does not scroll) spent
+            // NOTHING, so there is nothing to discard and no frame to wait for:
+            // this very event decides.
+            //
+            // Costing it unconditionally is what made a swipe "sometimes not
+            // work": the first touch event does not arrive at the finger's first
+            // millimetre — it arrives when the UI thread gets to it, which on a
+            // page still laying out its list can be 200px into the drag
+            // (measured on a managed circle's roster: mv#1 landed at dy=218
+            // with spent=1). Those 218px were thrown away, activation waited for
+            // the NEXT event, and by the time the surface began to follow the
+            // finger there was less than a commit distance of drag left in it.
+            // The page snapped back and read as a swipe that did nothing.
+            if (scrollTook.value) {
+              dragOrigin.value = { x: tch.absoluteX, y: tch.absoluteY }
+              return
+            }
           }
           const dx = tch.absoluteX - dragOrigin.value.x
           const dy = tch.absoluteY - dragOrigin.value.y
@@ -710,6 +833,19 @@ export function usePullBehavior(opts: {
             // Without this the surface snapped down by that whole distance on
             // its first frame, which is the jolt a swipe-close opened with.
             pullBase.value = tch.absoluteY - swipeStart.value.y
+            // THE SURFACE BEING DRAGGED AWAY TAKES THE KEYBOARD WITH IT, FROM
+            // THE FIRST FRAME OF THE DRAG (user directive 2026-08-03). Fired
+            // exactly here, where the pull TAKES OVER — not on touch-down, which
+            // is a tap or a scroll for all this arbitration knows yet, and not on
+            // the commit, which would leave the keyboard standing under a page
+            // that is already riding off. It does not contradict "scrolling never
+            // closes the keyboard": the inner scroll still outranks the pull and
+            // has already had its chance, so by this line the finger is not
+            // scrolling — it is putting the surface away.
+            //
+            // Once per gesture by construction: `activated` latches on the next
+            // line and this branch is the only thing that sets it.
+            runOnJS(dismissKeyboard)()
             manager.activate()
             return
           }
@@ -723,21 +859,28 @@ export function usePullBehavior(opts: {
           // `pullBase` is everything the finger spent before the pull took over
           // (the inner scroll it ran to its top, plus the activation slop), so
           // the surface tracks the finger 1:1 from the point it engaged.
-          const drag = (axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY) - pullBase.value
+          const drag = e.translationY - pullBase.value
           if (drag <= 0) return
           pullY.value = drag
-          // NO `setPulling` here. A sheet drag must not re-render the page it
-          // is dragging — the inner-scroll lock rides `engaged` on the UI
-          // thread instead (see PullCtx.pullEngaged). Written once per drag,
-          // not per frame, so the flag notifies its readers exactly twice.
-          if (!engaged.value) engaged.value = true
+          // Kept for the safety snap-back in onFinalize, which has no event of
+          // its own to read a release velocity from.
+          pullVelocity.value = e.velocityY
+          // The JS mirror is written ONLY where a caller asked for it (page1's
+          // name-slide). A drag must not re-render the surface it is dragging —
+          // the inner-scroll lock rides `engaged` on the UI thread instead (see
+          // PullCtx.pullEngaged). Written once per drag, not per frame, so the
+          // flag notifies its readers exactly twice.
+          if (!engaged.value) {
+            engaged.value = true
+            if (reportPulling) runOnJS(setPulling)(true)
+          }
         })
         .onEnd(e => {
           'worklet'
           // Measured from where the pull engaged, exactly as onUpdate draws it,
           // so the commit threshold is the distance the SURFACE moved.
-          const travel = (axis === 'x' ? e.translationX * AXIS_X_SIGN : e.translationY) - pullBase.value
-          const speed = axis === 'x' ? e.velocityX * AXIS_X_SIGN : e.velocityY
+          const travel = e.translationY - pullBase.value
+          const speed = e.velocityY
           const past = travel >= commitDistance
           // A flick is the CLOSE weight's alone: a surface thrown away is gone,
           // a decision may never be made by speed. See PullWeight.
@@ -754,99 +897,34 @@ export function usePullBehavior(opts: {
               pullY.value = withSpring(0, { velocity: speed, ...PULL_SNAP_SPRING })
             } else {
               // Uniform commit motion: ride off-screen, then onCommit.
-              slidOut.value = true
               pullY.value = withTiming(screenSpan, RIDE_OFF)
               runOnJS(onCommit)()
             }
           } else {
             pullY.value = withSpring(0, { velocity: speed, ...PULL_SNAP_SPRING })
           }
-          engaged.value = false
+          if (engaged.value) {
+            engaged.value = false
+            if (reportPulling) runOnJS(setPulling)(false)
+          }
         })
-        // Insurance: a gesture that dies without an onEnd must never leave the
-        // inner scroll locked for the rest of the page's life.
+        // Insurance, for a gesture that dies without ever reaching onEnd (the
+        // system takes the touch, a parent cancels it). Two things must not
+        // survive it: a surface left parked mid-drag — it springs home, seeded
+        // with the last velocity onUpdate saw, exactly as a short release does —
+        // and the inner scroll left locked for the rest of the page's life.
         .onFinalize(() => {
           'worklet'
-          if (engaged.value) engaged.value = false
-        })
-    }
-    // 'scrollPan' — page1 skip / invite decline.
-    return Gesture.Pan()
-      .withRef(panRef)
-      .enabled(gestureEnabled)
-      .activeOffsetY(4)
-      .failOffsetX([-25, 25])
-      .onStart(() => {
-        'worklet'
-        pullY.value = 0
-        pullVelocity.value = 0
-        slidOut.value = false
-        engaged.value = false
-        // Scroll always wins: a gesture that began below the top is
-        // committed to scrolling only for its lifetime.
-        scrollOnly.value = !scrollAtTopSV.value
-      })
-      .onUpdate(e => {
-        'worklet'
-        if (scrollOnly.value) { pullY.value = 0; return }
-        const raw = Math.max(0, e.translationY)
-        pullVelocity.value = e.velocityY
-        // NO resistance: the card tracks the finger 1:1 (user: "no
-        // resistance, the card slides directly with the finger"). The only
-        // guard against an accidental skip is the commit GATE in onEnd
-        // (finger travel ≥ commitDistance, speed-independent — see there);
-        // a short drag moves the card 1:1 but snaps back on release.
-        pullY.value = raw
-        if (raw > 0 && !engaged.value) { engaged.value = true; runOnJS(setPulling)(true) }
-      })
-      .onEnd(e => {
-        'worklet'
-        if (scrollOnly.value) return
-        // A DECIDING pull commits ONLY when the finger (and thus the 1:1 card)
-        // crossed commitDistance (~half screen), speed-INDEPENDENT: there is NO
-        // velocity flick — a fast swipe that didn't pass half never skips
-        // (user: "regardless of swipe speed, only if the finger and the
-        // card together passed the half"). A CLOSING one — a profile page, the
-        // preview sheet — is the ordinary swipe-away and honours a flick like
-        // every other surface that only goes away. Released short ⇒ the card
-        // snaps back (onFinalize).
-        const travel = Math.max(0, e.translationY)
-        if (travel >= commitDistance || (!deciding && e.velocityY > SWIPE_DISMISS_VELOCITY)) {
-          if (commitMode === 'snapBack') {
-            // The card STAYS (the invite decline opens a confirm dialog over
-            // it). Fire the request; onFinalize springs the card home because
-            // slidOut was deliberately not latched.
-            runOnJS(onCommit)()
-            return
+          if (!leaving.value && pullY.value !== 0 && engaged.value) {
+            pullY.value = withSpring(0, { velocity: pullVelocity.value, ...PULL_SNAP_SPRING })
           }
-          // Ride off-screen on the UI thread immediately, then fire onCommit
-          // right away (NOT deferred until the ride finishes). Deferring it
-          // pushed the old card's unmount/SlideOutDown to overlap the next
-          // card's mount, which made Reanimated intermittently drop the new
-          // card's entering — "a card appears suddenly without a rise". This
-          // is the proven, reliable timing; the small fall-motion polish is
-          // sacrificed for a card that always animates in. The ride-off uses
-          // an ease-OUT (fast start) so it continues the finger's downward
-          // motion instead of easing in from a dead stop — onCommit still
-          // fires immediately, so the reliable mount timing is untouched.
-          slidOut.value = true
-          pullY.value = withTiming(screenH, RIDE_OFF)
-          runOnJS(onCommit)()
-        }
-      })
-      .onFinalize(() => {
-        'worklet'
-        // Released short of commit → spring back to rest, seeded with the
-        // finger's last velocity (captured in onUpdate) so the card carries
-        // the drag's momentum into the snap-back instead of jerking to a stop
-        // then easing in. Critically damped → smooth, no bounce.
-        if (!slidOut.value) {
-          pullY.value = withSpring(0, { velocity: pullVelocity.value, ...PULL_SNAP_SPRING })
-        }
-        if (engaged.value) { engaged.value = false; runOnJS(setPulling)(false) }
-      })
+          if (engaged.value) {
+            engaged.value = false
+            if (reportPulling) runOnJS(setPulling)(false)
+          }
+        })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activation, gestureEnabled, commitMode, deciding, axis, commitDistance, screenSpan, screenH, onCommit, headerBottom])
+  }, [gestureEnabled, commitMode, deciding, commitDistance, screenSpan, onCommit, headerBottom, reportPulling, dismissKeyboard])
 
-  return { gesture, pullY, pulling, pullEngaged: engaged, pullCtx, panRef, setScrollAtTop, reset, commit, tutorialPlaying, commitDistance, screenSpan, slidOut }
+  return { gesture, pullY, pulling, pullEngaged: engaged, pullCtx, panRef, reach, armed, reset, commit, tutorialPlaying, commitDistance, screenSpan, leaving }
 }

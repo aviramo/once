@@ -80,11 +80,11 @@ export function resolveLocationType(
 }
 
 // Server-side v3 page shapes. page2 is always an object (never an array).
-type ServerPage1State = 'free' | 'watching' | 'waiting' | 'chat' | 'locked'
-type ServerPage2State = 'free' | 'pending' | 'chat' | 'locked'
+type ServerWatchState = 'free' | 'watching' | 'waiting' | 'chat' | 'locked'
+type ServerInviteState = 'free' | 'pending' | 'chat' | 'locked'
 
-interface Page1 {
-  state: ServerPage1State
+interface Watch {
+  state: ServerWatchState
   profile?: Profile
   message?: string
   invited_at?: string
@@ -94,8 +94,8 @@ interface Page1 {
   event?: string
 }
 
-interface Page2 {
-  state: ServerPage2State
+interface Invite {
+  state: ServerInviteState
   profile?: Profile
   profiles?: Profile[]
   message?: string
@@ -105,14 +105,21 @@ interface Page2 {
 }
 
 interface Pages {
-  page1: Page1
-  page2: Page2
+  /** THE WIRE KEY STAYS `page1`. The published build reads it out of the user
+   *  row and the DB's own triggers write it, so renaming it is an
+   *  Expand → Migrate → Contract staged over weeks in exchange for a name
+   *  nobody outside this file sees. It is translated to the app's own word
+   *  ONCE, in writeCompat below, and everything above that line says `watch`. */
+  page1: Watch
+  /** THE WIRE KEY STAYS `page2`, for the reason `page1` above does. Translated
+   *  to the app's own word once, in writeCompat. */
+  page2: Invite
 }
 
 // Legacy synthesized invite-card shape for the page2 incoming invitation UI.
 // Predates v3; the store derives it from the new page2 object so existing UI
 // branches continue to work without per-component rewrites.
-export type Page2Invite = Profile & {
+export type InviteCard = Profile & {
   state: 'pending' | 'missed' | 'fail'
   invited_at?: string
   expires_at?: string
@@ -123,19 +130,21 @@ export type Page2Invite = Profile & {
 /**
  * Pages as the client sees them after applyServerUser runs. Carries
  * synthetic `match`, `watchers`, and a legacy-shaped `page2` (Profile[] |
- * Page2Invite) for back-compat with UI code that predates v3.
+ * InviteCard) for back-compat with UI code that predates v3.
  */
 interface PagesCompat {
-  page1?: Page1
-  page2: Profile[] | Page2Invite
+  /** The board of the person I am WATCHING — `page1` on the wire. */
+  watch?: Watch
+  /** The invitation standing on me — `page2` on the wire. */
+  invite: Profile[] | InviteCard
   match?: Profile | null
   watchers?: Profile[]
   /** Raw v3 page2.state, preserved so UI can branch on `locked` separately
    * from the synthesized legacy shape (which folds locked-no-profile into
    * the empty watchers array). */
-  page2State?: ServerPage2State
+  inviteState?: ServerInviteState
   /** Raw v3 page2.message, when present. */
-  page2Message?: string
+  inviteMessage?: string
   /** ISO timestamp of last `app_add` press; gates the page2 "Show me to people" cooldown. */
   last_add_at?: string
   /** Server-computed geo-availability gate (relations.availability), written
@@ -250,6 +259,26 @@ let lastAppliedLastSeen = 0
 // last_seen and so can't be ordered) stays Realtime-authoritative.
 let lastRawRelations: Pages | null = null
 
+// ── The echo of a board the user has already left ──────────────────────────
+// A self-transition (find / ignore / pause / resume) is applied from its own
+// response the instant it lands, but the DB write it made is ALSO broadcast
+// over Realtime — and so was the write before it. Neither carries anything
+// that can order them: `last_seen` is a presence column and none of these RPCs
+// touches it, so the ordering guard above sees two events with the same stamp
+// and takes whichever arrives last. When the earlier echo lands last the client
+// is handed back the board it just left: pressing PAUSE mid-search stopped the
+// search, the play button came back, and then the candidate's card jumped up
+// for a second as the find's own echo arrived behind the pause's (reported
+// 2026-08-03).
+//
+// So a self-transition records the page1 it REPLACED, and for a short window an
+// incoming page1 identical to that one is ignored — it can only be the echo of
+// the state we deliberately left. Everything else in the event (page2, the
+// circles summary) is applied as usual: only the stale board is held back.
+const P1_ECHO_WINDOW_MS = 6000
+let stalePage1: { sig: string; until: number } | null = null
+const page1Sig = (p1: unknown) => JSON.stringify(p1 ?? null)
+
 const pending = new Map<keyof UserProfile, unknown>()
 
 // ── Boot-paint cache for the user's own row ────────────────────────────────
@@ -328,7 +357,7 @@ const FAIL_MESSAGES = new Set(['invite', 'approve', 'extend'])
  * - synthesized top-level `state` ('watching'|'waiting'|'chat'|'missed'|'fail'|null)
  * - synthesized `match` (chat partner profile)
  * - synthesized `watchers` (Profile[])
- * - legacy `page2` shape (array of Profile when free, Page2Invite object when pending/locked)
+ * - legacy `page2` shape (array of Profile when free, InviteCard object when pending/locked)
  */
 function deriveCompat(relations: Pages | null | undefined) {
   const page1 = relations?.page1
@@ -355,34 +384,34 @@ function deriveCompat(relations: Pages | null | undefined) {
   // keeping the card mounted.
   const match: Profile | null = state && page1?.profile ? (page1.profile as Profile) : null
 
-  let legacyPage2: Profile[] | Page2Invite
+  let legacyInvite: Profile[] | InviteCard
   if (page2?.state === 'pending' && page2.profile) {
-    legacyPage2 = {
+    legacyInvite = {
       ...(page2.profile as Profile),
       state: 'pending',
       ...(page2.invited_at ? { invited_at: page2.invited_at } : {}),
       ...(page2.expires_at ? { expires_at: page2.expires_at } : {}),
       ...(page2.extended !== undefined ? { extended: page2.extended } : {}),
-    } as Page2Invite
+    } as InviteCard
   } else if (page2?.state === 'locked' && page2.profile && page2.message) {
     // Dead-invite card surfaces only while the message is present. Once the
     // user acknowledges via clear2 the message is gone and locked+profile is
-    // treated as plain "needs free2" (legacyPage2 = [] empty watchers).
+    // treated as plain "needs free2" (legacyInvite = [] empty watchers).
     const synthState: 'missed' | 'fail' =
       FAIL_MESSAGES.has(page2.message) ? 'fail' : 'missed'
-    legacyPage2 = {
+    legacyInvite = {
       ...(page2.profile as Profile),
       state: synthState,
       message: page2.message,
-    } as Page2Invite
+    } as InviteCard
   } else {
-    legacyPage2 = watchers
+    legacyInvite = watchers
   }
 
   return {
-    state, watchers, match, legacyPage2,
-    page2State: (page2?.state ?? 'free') as ServerPage2State,
-    page2Message: page2?.message,
+    state, watchers, match, legacyInvite,
+    inviteState: (page2?.state ?? 'free') as ServerInviteState,
+    inviteMessage: page2?.message,
   }
 }
 
@@ -413,14 +442,17 @@ function writeCompat(d: Record<string, unknown>, relations: Pages | null | undef
   const compat = deriveCompat(relations)
   d.state = compat.state
   const relationsWithCompat: Record<string, unknown> = { ...(relations ?? {}) }
+  // The one place the wire's board names become the app's. Everything the UI
+  // reads from here on says `watch`; nothing above this line does.
+  relationsWithCompat.watch = relations?.page1
   relationsWithCompat.watchers = compat.watchers
   relationsWithCompat.match = compat.match
-  relationsWithCompat.page2 = compat.legacyPage2
-  relationsWithCompat.page2State = compat.page2State
-  if (compat.page2Message !== undefined) {
-    relationsWithCompat.page2Message = compat.page2Message
+  relationsWithCompat.invite = compat.legacyInvite
+  relationsWithCompat.inviteState = compat.inviteState
+  if (compat.inviteMessage !== undefined) {
+    relationsWithCompat.inviteMessage = compat.inviteMessage
   } else {
-    delete relationsWithCompat.page2Message
+    delete relationsWithCompat.inviteMessage
   }
   d.relations = relationsWithCompat
 }
@@ -470,9 +502,9 @@ export function selectProfileBuilt(profile: UserProfile | null | undefined): boo
 }
 
 export function selectIsHidden(profile: UserProfile | null | undefined): boolean {
-  const page2 = profile?.relations?.page2
-  const hasInviteCard = !!page2 && !Array.isArray(page2)
-  return profile?.relations?.page2State === 'locked' && !hasInviteCard
+  const invite = profile?.relations?.invite
+  const hasInviteCard = !!invite && !Array.isArray(invite)
+  return profile?.relations?.inviteState === 'locked' && !hasInviteCard
 }
 
 /** WHY nobody can see this user right now, or null when they can.
@@ -550,14 +582,14 @@ export function selectWatching(profile: UserProfile | null | undefined): Watchin
   const relations = profile?.relations
   const names: string[] = []
   const named: string[] = []
-  const page2 = relations?.page2
-  if (relations?.page2State === 'pending' && page2 && !Array.isArray(page2)) {
-    const inviter = page2 as Page2Invite
+  const invite = relations?.invite
+  if (relations?.inviteState === 'pending' && invite && !Array.isArray(invite)) {
+    const inviter = invite as InviteCard
     if (inviter.name) { names.push(inviter.name); named.push(inviter.user_id) }
   }
-  const page1 = relations?.page1
-  if ((page1?.state === 'waiting' || page1?.state === 'chat') && page1.profile?.name) {
-    names.push(page1.profile.name); named.push(page1.profile.user_id)
+  const watch = relations?.watch
+  if ((watch?.state === 'waiting' || watch?.state === 'chat') && watch.profile?.name) {
+    names.push(watch.profile.name); named.push(watch.profile.user_id)
   }
   const watchers = relations?.watchers ?? []
   const others = watchers.filter(w => !named.includes(w.user_id)).length
@@ -698,6 +730,12 @@ export const useUserStore = create<UserStore>((set, get) => ({
       const respRel = d.relations as Pages & { communities?: unknown }
       const base = lastRawRelations ?? respRel
       const rebuilt = withCircles({ ...base, page1: respRel.page1 } as Pages, respRel)
+      // Latch the board this transition replaced, so its own Realtime echo
+      // (which may well arrive AFTER this one's) cannot put it back.
+      const leftSig = page1Sig(base.page1)
+      stalePage1 = leftSig === page1Sig(respRel.page1)
+        ? null
+        : { sig: leftSig, until: Date.now() + P1_ECHO_WINDOW_MS }
       lastRawRelations = rebuilt
       writeCompat(d, rebuilt)
     } else if ((source === 'invoke' || source === 'invoke:self') && prev) {
@@ -729,7 +767,27 @@ export const useUserStore = create<UserStore>((set, get) => ({
       // Realtime/fetch with relations present — authoritative. Stash the raw
       // relations for the find/ignore page1 merge, then translate v3 relations
       // into the legacy shape the UI reads (state / match / watchers / page2).
-      const relations = d.relations as Pages | null | undefined
+      let relations = d.relations as Pages | null | undefined
+      // …unless its page1 is the board a self-transition just left (see
+      // stalePage1). Only page1 is held back; the rest of the event is fresh.
+      // `fetch` is a direct SELECT of the row as it stands and is never an echo,
+      // so it both applies and RELEASES the latch.
+      if (source === 'fetch') {
+        stalePage1 = null
+      } else if (stalePage1) {
+        if (Date.now() > stalePage1.until) stalePage1 = null
+        else if (page1Sig(relations?.page1) === stalePage1.sig) {
+          relations = { ...(relations ?? {}), page1: lastRawRelations?.page1 } as Pages
+        } else {
+          // A board that is NOT the one we left: the echoes have caught up, so
+          // the latch is spent. It could only ever have matched that one exact
+          // board anyway — a next candidate carries a different profile and a
+          // different expiry, so it was never at risk of being held back — but
+          // an armed latch outliving its reason is not a thing to leave lying
+          // around on the one path every card arrives by.
+          stalePage1 = null
+        }
+      }
       lastRawRelations = relations ?? null
       writeCompat(d, relations)
     }
@@ -771,6 +829,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     pending.clear()
     lastAppliedLastSeen = 0
     lastRawRelations = null
+    stalePage1 = null
     void profileCache.clearAll()
     set({ profile: null, fetched: false, serverSynced: false })
   },

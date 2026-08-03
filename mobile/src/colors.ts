@@ -88,9 +88,9 @@ export const WHITE_SOFT   = 'rgba(255,255,255,0.20)'  // subtle fills on a purpl
 // white tile; the photo underneath is arbitrary so it must supply its own
 // contrast.
 export const PHOTO_CHROME = SURFACE
-// The fade behind the OS status glyphs (`StatusBarBand`): INK, applied at a
-// 0.5 → 0 vertical fade in the component (the stops live there).
-export const STATUS_BAND = INK
+// (There is no STATUS_BAND colour any more, 2026-08-03: the purple fade behind
+// the OS status glyphs is now the app's own edge shade: SHADOW_BLACK falling
+// from EDGE_SHADE_ALPHA to nothing — see EDGE_SHADE_REACH in tokens.ts.)
 // Presence dot: someone is here NOW.
 export const PRESENCE = INK
 // An error, or a removed-stars delta (-N). No red in the palette (2026-07-25).
@@ -110,16 +110,9 @@ export const SELECTION = 'rgba(92,74,148,0.25)'
 // border, or text.
 export const SHADOW_BLACK = '#000000'
 
-// The soft lift shadow every floating tile over a photo casts — the round
-// overlay buttons AND the on-photo chips — so they read as one fabric sitting
-// off the image. Discrete RN shadow props (not a boxShadow string) so it also
-// carries the Android `elevation` the buttons rely on. Single source: RoundButton,
-// Chip and the match card's oversized bio tile all spread this, never re-type the
-// numbers.
-export const LIFT_SHADOW = {
-  shadowColor: SHADOW_BLACK,
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.25,
-  shadowRadius: 8,
-  elevation: 6,
-} as const
+// (`LIFT_SHADOW`, the discrete-props lift the on-photo chips and the round
+// buttons used to cast, is DELETED — user directive 2026-08-03: ONE shadow for
+// every tile lying on something, and it is `CARD_SHADOW` in tokens.ts. Its drop
+// and its Android `elevation` were a second, heavier answer to the same
+// question, and read side by side with a settings card the chips looked like a
+// different fabric.)

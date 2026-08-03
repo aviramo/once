@@ -1,7 +1,6 @@
 import { View, StyleSheet } from 'react-native'
 import { CreditIcon } from './icons'
-import { XS, RADII, ICON } from '../tokens'
-import { LIFT_SHADOW } from '../colors'
+import { XS, RADII, ICON, CARD_SHADOW } from '../tokens'
 
 // ── "THIS SPENDS A CREDIT" ─────────────────────────────────────────────────
 // The mark that rides INSIDE an action, in place of its icon: the credits glyph,
@@ -29,7 +28,7 @@ export function CreditCost({
    *  button. */
   bg: string
   /** IT IS FLOATING, so it casts what everything floating in this app casts
-   *  (user directive 2026-08-01): `LIFT_SHADOW`, the same lift the round button
+   *  (user directive 2026-08-01): `CARD_SHADOW`, the same lift the round button
    *  it rides and every on-photo chip carry, so the two discs read as one fabric
    *  off the image. Only for the badge that stands ON a photo — the one INSIDE a
    *  filled button is not lifted off anything and stays flat. */
@@ -54,7 +53,7 @@ const styles = StyleSheet.create({
     padding: XS,
     borderRadius: RADII.pill,
   },
-  // The app's ONE soft lift, spread from `colors.ts` and never re-typed — see
-  // `lifted`.
-  lift: LIFT_SHADOW,
+  // The app's ONE lift for a tile lying on something (`CARD_SHADOW`), never
+  // re-typed — see `lifted`.
+  lift: { boxShadow: CARD_SHADOW },
 })

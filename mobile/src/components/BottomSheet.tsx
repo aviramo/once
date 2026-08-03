@@ -13,13 +13,20 @@ import { DragHandle } from './DragHandle'
 import { SURFACE, PAGE, INK } from '../colors'
 import { useBottomInset } from '../hooks/useBottomInset'
 import { useKeyboardShrinkSV } from '../hooks/useKeyboard'
-import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, SHEET_SHADOW, SHEET_TOP_GAP, SHEET_GAP, SCROLL_FADE } from '../tokens'
+import { MD, SM, LG, RADIUS, TEXT, WEIGHT, lh, bottomGap, SWIPE_DISMISS_PX, SWIPE_DISMISS_VELOCITY, PAN_ACTIVE_OFFSET_Y, PAN_FAIL_OFFSET_Y, RISE_SHADOW, SHEET_TOP_GAP, SHEET_GAP, SCROLL_FADE, MOTION, CARD_SHADOW } from '../tokens'
 
 // Off-screen start position for the slide-in. Screen height is guaranteed to
 // exceed any sheet's height, so the sheet always begins fully hidden no matter
 // how tall its content is — unlike the old magic 800, which let a taller sheet
 // peek before it had been measured and made the slide distance feel wrong.
 const SCREEN_H = Dimensions.get('screen').height
+
+// The popup's arrival and departure, at the app's one rise duration (MOTION.rise
+// — the same one RisingCard's pages take, so a popup and a page arrive at the
+// same speed). Stated once here so the entrance, the dismiss and the swipe's
+// ride-off can never drift apart. No easing named: the framework's own is what
+// the preset used and only the duration is being said.
+const RISE_TIMING = { duration: MOTION.rise } as const
 
 // Single source of truth for the bottom-sheet behavior used by every popup
 // in the app: slide-up mount, slide-down dismiss, swipe-to-dismiss gesture,
@@ -69,6 +76,15 @@ type BottomSheetProps = {
   // to SheetTitle/SheetDesc/SheetActions. A `paddingBottom` here has no effect at
   // all — it is applied after this style.
   contentStyle?: any
+  // THE CARD'S OWN COLOUR, and the ONE thing a call site may say about it.
+  // Every popup is white (see `card` below) and this exists for the single
+  // surface that is not: the address search, which is a PAGE holding white
+  // cards — the field and the run of results — exactly as home and Circles are
+  // (user directive 2026-08-03). It is a prop and not a `contentStyle`
+  // background because the ground is not only the card's: the scroll fades are
+  // painted in it too, and a fade left white over a tinted card would be a band
+  // of the wrong colour at the edge of the list.
+  ground?: string
   // When the sheet body contains a scrollable child (e.g. a ScrollView wrapped
   // in <GestureDetector gesture={Gesture.Native()}>), pass that native gesture
   // here so the dismiss-pan and the scroll can run simultaneously. Combined
@@ -109,6 +125,9 @@ type SheetScrollWiring = {
    *  a window one: the card rides the entrance slide on a transform, so its
    *  on-screen position is a moving target while the popup is opening. */
   cardRef: React.RefObject<View | null>
+  /** The card's own colour, so the block's fades dissolve into the ground they
+   *  actually stand on rather than into an assumed white. */
+  ground: string
 }
 const SheetScrollContext = createContext<SheetScrollWiring | null>(null)
 
@@ -122,6 +141,7 @@ export function BottomSheet({
   busy,
   cardWrapStyle,
   contentStyle,
+  ground = SURFACE,
   scrollableGesture,
   scrollAtTop,
 }: BottomSheetProps) {
@@ -163,8 +183,8 @@ export function BottomSheet({
   const bodyScrollBottom = useSharedValue(Number.NEGATIVE_INFINITY)
   const cardRef = useRef<View | null>(null)
   const scrollWiring = useMemo<SheetScrollWiring>(
-    () => ({ native: bodyScroll, atTop: bodyAtTop, top: bodyScrollTop, bottom: bodyScrollBottom, cardRef }),
-    [bodyScroll, bodyAtTop, bodyScrollTop, bodyScrollBottom],
+    () => ({ native: bodyScroll, atTop: bodyAtTop, top: bodyScrollTop, bottom: bodyScrollBottom, cardRef, ground }),
+    [bodyScroll, bodyAtTop, bodyScrollTop, bodyScrollBottom, ground],
   )
   // Armed when an open is requested; the slide-in fires from the sheet's first
   // onLayout (the earliest moment the content is mounted AND the native Modal
@@ -201,7 +221,7 @@ export function BottomSheet({
       // Always drop the keyboard when any sheet closes so it never lingers
       // over the screen behind. No-op when no field was focused.
       Keyboard.dismiss()
-      translateY.value = withTiming(cardHeight.value, undefined, () => {
+      translateY.value = withTiming(cardHeight.value, RISE_TIMING, () => {
         runOnJS(setModalVisible)(false)
       })
     }
@@ -256,17 +276,17 @@ export function BottomSheet({
       'worklet'
       const eligible = wasAtTop.value
       if (eligible && (e.translationY > SWIPE_DISMISS_PX || e.velocityY > SWIPE_DISMISS_VELOCITY)) {
-        dragY.value = withTiming(cardHeight.value)
+        dragY.value = withTiming(cardHeight.value, RISE_TIMING)
         runOnJS(onDismiss)()
       } else {
-        dragY.value = withTiming(0)
+        dragY.value = withTiming(0, RISE_TIMING)
       }
     })
 
   // APPLICATION POINT 2 of 2 for the keyboard (see src/hooks/useKeyboard.ts).
   //
   // A RN `Modal` is its own native window: it never resizes for the IME on
-  // either platform, and it does not inherit the root shrink in _layout.tsx. So
+  // either platform, and it inherits no shrink from any page (the app root shrinks nothing, 2026-08-03). So
   // THE POPUP LIFTS ITSELF, here, once, for all fourteen popups — a call site
   // must never nudge itself again (that double-applied and overshot, which is
   // what the per-screen rule of 2026-05-19 was working around; with the lift in
@@ -306,8 +326,19 @@ export function BottomSheet({
             // start) — the earliest correct frame, no blind rAF.
             if (openingRef.current) {
               openingRef.current = false
-              translateY.value = SCREEN_H
-              translateY.value = withTiming(0)
+              // START AT THE CARD'S OWN HEIGHT, NEVER AT THE SCREEN'S. The
+              // entrance is bottom-anchored: at translateY == cardHeight the
+              // card is exactly off the bottom edge, which is where "rises from
+              // the bottom of the screen" begins. Seeded with SCREEN_H it began
+              // a whole screen lower and spent the first half of the 300ms
+              // travelling below the edge, unseen — a third of a second in which
+              // nothing happened and then the card crossed its own height at
+              // speed, worst of all on a SHORT popup, which inherits the most
+              // dead time. Measured here and not before, because this is the one
+              // frame the height is known (it is written to cardHeight above);
+              // the close already rides that same number.
+              translateY.value = e.nativeEvent.layout.height
+              translateY.value = withTiming(0, RISE_TIMING)
             }
           }}
         >
@@ -322,6 +353,9 @@ export function BottomSheet({
               !dragHandle && styles.cardNoHandle,
               { maxHeight },
               contentStyle,
+              // After `contentStyle`, like the bottom gap below it: the ground
+              // is the sheet's to state, never a body style's.
+              { backgroundColor: ground },
               { paddingBottom: bottomPad },
             ]}
           >
@@ -388,7 +422,7 @@ export function SheetTitle({ children, style }: { children: ReactNode; style?: S
 // ONE component, told which edge it is: the two are the same gradient, flipped.
 const FADE_ID = { top: 'sheetScrollFadeTop', bottom: 'sheetScrollFadeBottom' } as const
 
-function ScrollFade({ edge, show }: { edge: 'top' | 'bottom'; show: boolean }) {
+function ScrollFade({ edge, show, ground }: { edge: 'top' | 'bottom'; show: boolean; ground: string }) {
   // Fades in and out rather than blinking on the frame the last line arrives —
   // default timing, like every other fade in the app.
   const fade = useSharedValue(0)
@@ -396,6 +430,11 @@ function ScrollFade({ edge, show }: { edge: 'top' | 'bottom'; show: boolean }) {
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }))
   // Opaque at the card's edge, clear where the text carries on.
   const [near, far] = edge === 'top' ? ['1', '0'] : ['0', '1']
+  // The gradient's id carries the colour, not just the edge: two popups can be
+  // on screen at once (a sheet nested in a sheet) and now no longer share a
+  // ground, so an id that named only the edge would let one block's fade be
+  // painted in the other's colour.
+  const fadeId = `${FADE_ID[edge]}_${ground.replace(/[^a-zA-Z0-9]/g, '')}`
   return (
     <Animated.View
       style={[styles.scrollFade, edge === 'top' ? styles.scrollFadeTop : styles.scrollFadeBottom, fadeStyle]}
@@ -403,12 +442,12 @@ function ScrollFade({ edge, show }: { edge: 'top' | 'bottom'; show: boolean }) {
     >
       <Svg width="100%" height="100%">
         <Defs>
-          <LinearGradient id={FADE_ID[edge]} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={SURFACE} stopOpacity={near} />
-            <Stop offset="1" stopColor={SURFACE} stopOpacity={far} />
+          <LinearGradient id={fadeId} x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={ground} stopOpacity={near} />
+            <Stop offset="1" stopColor={ground} stopOpacity={far} />
           </LinearGradient>
         </Defs>
-        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${FADE_ID[edge]})`} />
+        <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${fadeId})`} />
       </Svg>
     </Animated.View>
   )
@@ -430,7 +469,14 @@ function ScrollFade({ edge, show }: { edge: 'top' | 'bottom'; show: boolean }) {
 // The inner scroll always outranks the sheet's swipe-to-dismiss: it takes the
 // wiring from the BottomSheet around it (context), so a drag with scrolling
 // still to do scrolls, and only a drag that begins at the top can dismiss.
-export function SheetScroll({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function SheetScroll({ children, style, scrollRef }: {
+  children: ReactNode
+  style?: StyleProp<ViewStyle>
+  /** For a list that has to place ITSELF when it opens — the height picker
+   *  scrolls the ticked row into view. The block still owns its scroll in every
+   *  other respect; this is only a way in. */
+  scrollRef?: React.RefObject<ScrollView | null>
+}) {
   const wiring = useContext(SheetScrollContext)
   // Is there anything above or below the fold right now? Kept in refs and
   // reduced to two booleans, so a scroll frame re-renders nothing unless one of
@@ -474,6 +520,7 @@ export function SheetScroll({ children, style }: { children: ReactNode; style?: 
 
   const scroll = (
     <ScrollView
+      ref={scrollRef}
       style={styles.scrollBody}
       showsVerticalScrollIndicator={false}
       // The app-wide keyboard rule, for the one field-bearing scroll surface
@@ -497,8 +544,8 @@ export function SheetScroll({ children, style }: { children: ReactNode; style?: 
   return (
     <View ref={boxRef} style={[styles.scrollBox, style]} onLayout={syncBounds}>
       {wiring ? <GestureDetector gesture={wiring.native}>{scroll}</GestureDetector> : scroll}
-      <ScrollFade edge="top" show={above} />
-      <ScrollFade edge="bottom" show={more} />
+      <ScrollFade edge="top" show={above} ground={wiring?.ground ?? SURFACE} />
+      <ScrollFade edge="bottom" show={more} ground={wiring?.ground ?? SURFACE} />
     </View>
   )
 }
@@ -544,7 +591,11 @@ const styles = StyleSheet.create({
     // tint. This is the single place the popup ground is set: ConfirmDialog,
     // BuyExtraPopup, SharedCirclesPopup and every action sheet compose this card.
     backgroundColor: SURFACE,
-    boxShadow: SHEET_SHADOW,
+    // The app's ONE lift for a surface that came from below (RISE_SHADOW in
+    // tokens.ts) — the same one home's dock and every rising page wear. A popup
+    // used to have a fainter, wider-blurred one of its own and next to the dock
+    // it read as flat (user directive 2026-08-03).
+    boxShadow: RISE_SHADOW,
     // THE gutter of every popup in the app, exactly as the bottom gap below is
     // THE air under its last row (user directive 2026-07-30). It used to be the
     // call site's: LG in ConfirmDialog, MD on the group and shared-lists popups,
@@ -580,6 +631,8 @@ const styles = StyleSheet.create({
     paddingVertical: MD,
     paddingHorizontal: MD,
     gap: MD,
+    // A filled tile on a surface takes the app's one lift (2026-08-03).
+    boxShadow: CARD_SHADOW,
   },
   actionRowDisabled: {
     opacity: 0.55,

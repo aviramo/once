@@ -3,13 +3,21 @@
 // One inline text editor shared by the profile bio (MatchCard's on-photo /
 // fallback bubble) and the group description (CirclesPage). The field is a
 // multiline TextInput styled by the caller to look byte-identical to the
-// read-only text it replaces; tapping drops the caret natively. While focused,
-// a footer bar carries an explicit Update button — the ONLY save path — plus the
-// below-minimum hint when there is one. There is NO character counter anywhere
-// (user directive 2026-07-28): the cap is enforced silently by maxLength, never
-// announced. Leaving the field without pressing Update (blur / keyboard
-// dismissed / focus lost) discards the edit and reverts to the last committed
-// value. Nothing is saved on blur.
+// read-only text it replaces; tapping drops the caret natively.
+//
+// LEAVING THE FIELD SAVES IT, AND THERE IS NO UPDATE BUTTON (user directive
+// 2026-08-03). A field that grew a footer with a button in it made the one
+// thing the user had already done — type — need a second act to count, and the
+// three ways out of a field that never pass through that button (BACK, the
+// IME's hide key, a tap outside) all threw the edit away silently. The edit
+// ends where the keyboard does, by every route identically, and what is in the
+// field at that moment is what is saved. A value that cannot be saved (below
+// min, over max, unchanged) reverts on the way out, exactly as before.
+//
+// There is NO character counter anywhere (user directive 2026-07-28): the cap
+// is enforced silently by maxLength, never announced. What is left of the
+// footer is the hint slot — the below-minimum requirement and a refusal — and
+// it exists only when there is something in it to read.
 //
 // A commit the SERVER refuses (onCommit's promise rejects) leaves the refused
 // text in the field with `errorLabel` under it, so it can be corrected instead
@@ -20,27 +28,24 @@
 // The bio wrapper (BioField in MatchCard) keeps the card pixel-identical; the
 // group description passes allowEmpty so a cleared field commits null.
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { View, StyleSheet, Keyboard, type StyleProp, type TextStyle, type TextInput as RNTextInput, type ViewStyle } from 'react-native'
+import { View, StyleSheet, type StyleProp, type TextStyle, type TextInput as RNTextInput, type ViewStyle } from 'react-native'
 import { Text, TextInput } from './AppText'
-import { Button } from './Button'
+import { LineProbe } from './GlyphSlot'
+import { FONT_SCALE } from '../fonts'
+import { TEXT } from '../tokens'
 import { normalizeBio } from '../lib/bio'
-import { useFocusedFieldFooter, useKeyboardOpen } from '../hooks/useKeyboard'
+import { useKeyboardOpen } from '../hooks/useKeyboard'
 import { INK_DIM, NEGATIVE } from '../colors'
-
-// The footer's measured height, remembered across instances and focuses. The
-// keyboard's reveal needs it at the instant the field takes focus, and on the
-// very first focus of a session the footer has not been laid out yet — every
-// focus after that starts from the real number instead of guessing.
-let lastFooterHeight = 0
 
 export type EditableTextProps = {
   /** Last committed value (server truth, '' when unset). */
   value: string
   /** Server round-trip in flight — locks the field. */
   saving?: boolean
-  /** Fired only by the Update button with the normalized value, or null when
-   *  allowEmpty and the field was cleared. Never on blur. May return the save's
-   *  promise: a REJECTION is what tells the field the server refused it. */
+  /** Fired when the edit ENDS, with the normalized value, or null when
+   *  allowEmpty and the field was cleared. Not fired at all when nothing
+   *  changed or the draft is unsaveable. May return the save's promise: a
+   *  REJECTION is what tells the field the server refused it. */
   onCommit: (next: string | null) => void | Promise<unknown>
   /** Shown under the field when the last commit was refused. The refused text
    *  stays in the field so it can be corrected rather than retyped. Omit and a
@@ -50,7 +55,6 @@ export type EditableTextProps = {
   min: number
   max: number
   placeholder: string
-  updateLabel: string
   /** Shown in the footer's hint slot while below min (ignored when min is 0). */
   minLabel?: string
   /** Physical alignment. Omit to follow the writing direction (RTL-aware) — the
@@ -64,8 +68,19 @@ export type EditableTextProps = {
    *  URL keyboard and no auto-capitalization). Both default to plain text. */
   keyboardType?: 'default' | 'url'
   autoCapitalize?: 'none' | 'sentences'
-  /** Ask the parent to scroll this field above the keyboard (bio uses it). */
-  onFocusRequested?: () => void
+  /** The edit STARTED. For a host that has to stand something down while a
+   *  field is open (the card's reel suspends paging). NEVER a request to
+   *  scroll: no text field in the app moves its page (user directive
+   *  2026-08-03). */
+  onEditStart?: () => void
+  /** WHILE EDITING, the field is at most this many lines tall and scrolls
+   *  inside itself. A field that grows without a ceiling carries its own last
+   *  line down under the keyboard with every line typed, and on a surface whose
+   *  scroll is a paged photo reel there is nothing left to scroll it back into
+   *  view with. Omitted, the field grows with its text as before. The cap
+   *  is a MEASURED line box (LineProbe), never `lh()` arithmetic: a declared
+   *  line height and a painted one part company on a large-font device. */
+  maxLines?: number
   placeholderTextColor?: string
   inputStyle?: StyleProp<TextStyle>
   footerStyle?: StyleProp<ViewStyle>
@@ -73,9 +88,9 @@ export type EditableTextProps = {
 }
 
 export function EditableText({
-  value, saving, onCommit, errorLabel, min, max, placeholder, updateLabel, minLabel,
+  value, saving, onCommit, errorLabel, min, max, placeholder, minLabel,
   textAlign, allowEmpty = false, singleLine = false,
-  keyboardType = 'default', autoCapitalize = 'sentences', onFocusRequested,
+  keyboardType = 'default', autoCapitalize = 'sentences', onEditStart, maxLines,
   placeholderTextColor = INK_DIM,
   inputStyle, footerStyle, hintStyle,
 }: EditableTextProps) {
@@ -97,9 +112,8 @@ export function EditableText({
   // External value changes (Realtime refresh) sync into the draft only while
   // not editing, so a server echo can't yank text out from under the caret.
   //
-  // NOT while a commit is in flight either: pressing Update dismisses the
-  // keyboard, and the blur that follows unfocuses the field a beat BEFORE the
-  // round trip lands — so this used to repaint the freshly-typed text with the
+  // NOT while a commit is in flight either: the commit is FIRED by the blur, so
+  // the field is already unfocused a beat BEFORE the round trip lands — so this used to repaint the freshly-typed text with the
   // still-stale `value`, and the field sat empty until the server echoed back
   // (the "it vanished and then appeared" group link, 2026-07-29). Skipped while
   // `failed` for the same reason: the refused text stays put to be fixed.
@@ -109,18 +123,13 @@ export function EditableText({
     setDraft(value)
   }, [value, focused, saving, committing, failed])
 
-  const normalizedDraft = normalizeBio(draft)
-  const trimmedLen = draft.trim().length
-  const belowMin = trimmedLen < min
-  // Cap the SAVE too, not only typing: an existing server value that is over
-  // max (out-of-band write, older policy) must not be re-committed as-is.
-  // normalizeBio only shrinks, so it is the true post-save length.
-  const overMax = normalizedDraft.length > max
-  const dirty = normalizedDraft !== normalizeBio(committedRef.current)
-  const canSave = !belowMin && !overMax && dirty && !saving && !committing
+  const belowMin = draft.trim().length < min
   const showError = failed && !!errorLabel
+  // Only what the reader can act on: the requirement he is short of, or the
+  // refusal. Both are absent most of the time, and then there is no footer.
+  const hint = showError ? errorLabel : belowMin && focused ? (minLabel ?? '') : ''
 
-  // The save routine, fired only by the Update button (never on blur).
+  // The save routine, fired when the edit ends.
   const commit = useCallback(() => {
     const next = normalizeBio(draft)
     const prev = normalizeBio(committedRef.current)
@@ -136,8 +145,9 @@ export function EditableText({
     // The commit is usually a server round trip, and the server is the only
     // one that knows whether the value is acceptable (a group link's shape
     // lives in the RPC). A refusal restores the previous committed value — so
-    // the field is dirty again and Update re-arms — while LEAVING the refused
-    // text on screen with errorLabel under it. It must never revert in silence.
+    // the field is dirty again and the next departure retries — while LEAVING
+    // the refused text on screen with errorLabel under it, to be corrected
+    // rather than retyped. It must never revert in silence.
     // An accepted one lets the sync above run again, which is how the server's
     // own normalization (a bare host coming back with its https://) repaints.
     Promise.resolve(onCommit(allowEmpty && next.trim() === '' ? null : next))
@@ -147,29 +157,27 @@ export function EditableText({
       )
   }, [draft, onCommit, min, max, allowEmpty])
 
-  // Leaving without pressing Update discards the edit — and with it the refusal
-  // it may have earned. (The blur that Update itself causes runs BEFORE the
-  // round trip answers, so it never clears a message it is about to show.)
+  // LEAVING THE FIELD IS THE SAVE. Whatever route ended the edit — a tap
+  // outside, BACK, the IME's hide key, focus moving to the next field — the
+  // draft is committed here and nowhere else. An unsaveable draft (unchanged,
+  // below min, over max) is reverted by commit() itself, so leaving is always
+  // safe. The refusal a commit may earn is NOT cleared here: it is raised after
+  // this handler has run and must survive the blur that caused it.
   const handleBlur = useCallback(() => {
     setFocused(false)
-    setFailed(false)
-    setDraft(committedRef.current)
-  }, [])
-
-  // The only save path: commit, then drop the keyboard. commit() sets
-  // committedRef to the new value, so the blur that follows reverts to it
-  // (a no-op) rather than throwing the fresh save away.
-  const handleUpdate = useCallback(() => { commit(); Keyboard.dismiss() }, [commit])
+    commit()
+  }, [commit])
 
   // THE KEYBOARD GOING AWAY ENDS THE EDIT (user directive 2026-07-30) — by
   // whichever of the three routes took it away: BACK, the IME's own hide key,
   // or a tap outside the field. Only the last of those passes through JS
   // (`Keyboard.dismiss()`, which blurs); the other two are handled by the IME
   // and never reach the app at all, so they used to leave the field FOCUSED,
-  // with its caret and its Update footer standing under a keyboard that was no
-  // longer there — the app believing the edit was over (paging back on, taps
-  // live again) while the platform believed it was still running. The field
-  // ends it itself, here, for the bio and for all three group editors at once.
+  // with its caret standing under a keyboard that was no longer there — the app
+  // believing the edit was over (paging back on, taps live again) while the
+  // platform believed it was still running. The field ends it itself, here, for
+  // the bio and for all three group editors at once — and since leaving the
+  // field is what SAVES it, this is also how those two routes commit.
   //
   // A field that never saw the keyboard is left alone: focus lands one beat
   // BEFORE the keyboard starts moving, and blurring in that window would undo
@@ -184,18 +192,23 @@ export function EditableText({
     if (had && focused) inputRef.current?.blur()
   }, [keyboardOpen, focused])
 
-  // Taking focus grows a footer UNDER the input, and the Update button in it is
-  // the only save path — so it is part of what the keyboard must not cover. The
-  // platform only reports the input's own frame, so the field declares the rest
-  // itself (src/hooks/useKeyboard.ts).
-  const [footerHeight, setFooterHeight] = useState(lastFooterHeight)
-  useFocusedFieldFooter(footerHeight, focused)
+  // The line-height cap. The probe carries the FIELD's own fontSize — the caller
+  // styles this input to look byte-identical to the text it replaces, so the
+  // size has to come off that style rather than from a default nobody passed.
+  const [lineH, setLineH] = useState(0)
+  const probeSize = StyleSheet.flatten(inputStyle)?.fontSize ?? TEXT.md
+  const capped = maxLines != null && focused && lineH > 0
+  const capStyle = capped ? { maxHeight: lineH * maxLines! } : null
 
   return (
     <>
+      {/* Out of flow: a measuring stick, not content. */}
+      {maxLines != null ? (
+        <LineProbe size={probeSize} cap={FONT_SCALE} style={styles.probe} onHeight={setLineH} />
+      ) : null}
       <TextInput
         ref={inputRef}
-        style={inputStyle}
+        style={[inputStyle, capStyle]}
         value={draft}
         onChangeText={v => {
           setFailed(false)
@@ -203,7 +216,10 @@ export function EditableText({
         }}
         maxLength={max}
         multiline={!singleLine}
-        scrollEnabled={false}
+        // The field grows with its text and never scrolls — EXCEPT once it has
+        // hit its line cap, where scrolling inside itself is the only way the
+        // rest of the text stays reachable.
+        scrollEnabled={capped}
         textAlign={textAlign}
         textAlignVertical="top"
         keyboardType={keyboardType}
@@ -212,25 +228,16 @@ export function EditableText({
         placeholder={placeholder}
         placeholderTextColor={placeholderTextColor}
         editable={!saving}
-        onFocus={() => { setFocused(true); onFocusRequested?.() }}
+        onFocus={() => { setFocused(true); onEditStart?.() }}
         onBlur={handleBlur}
       />
-      {focused || showError ? (
-        <View
-          style={footerStyle}
-          onLayout={e => {
-            const h = e.nativeEvent.layout.height
-            if (h > 0 && h !== lastFooterHeight) { lastFooterHeight = h; setFooterHeight(h) }
-          }}
-        >
-          {/* Hint slot: the refusal, else the below-minimum requirement. Never
-              a count of what is left — the cap is silent. */}
-          <Text style={[hintStyle, showError && styles.error]}>
-            {showError ? errorLabel : belowMin ? (minLabel ?? '') : ''}
-          </Text>
-          {/* The refusal outlives the keyboard, so the footer can be on screen
-              with nothing to press until the field is focused again. */}
-          {focused ? <Button label={updateLabel} onPress={handleUpdate} size="md" disabled={!canSave} /> : null}
+      {/* The hint slot, and only when it has something to say: the refusal
+          (which outlives the keyboard — it is what has to be corrected), else
+          the below-minimum requirement. Never a count of what is left; the cap
+          is silent. */}
+      {hint ? (
+        <View style={footerStyle}>
+          <Text style={[hintStyle, showError && styles.error]}>{hint}</Text>
         </View>
       ) : null}
     </>
@@ -241,4 +248,6 @@ const styles = StyleSheet.create({
   // A refusal reads at full strength — the hint beside it is deliberately
   // quieter (INK_MUTED), and this one is the reason the save did not happen.
   error: { color: NEGATIVE },
+  // Zero-size and out of flow, so the probe adds nothing to the field's box.
+  probe: { position: 'absolute', width: 0 },
 })

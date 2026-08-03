@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, View, ActivityIndicator, Pressable, Keyboard, type GestureResponderEvent } from 'react-native'
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, FadeOut, useAnimatedRef, scrollTo, useDerivedValue, cancelAnimation, runOnJS, type SharedValue } from 'react-native-reanimated'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
@@ -6,25 +6,25 @@ import { Image } from 'expo-image'
 import { useBottomInset } from '../hooks/useBottomInset'
 import { useKeyboardOpen } from '../hooks/useKeyboard'
 import { useCountBlink } from '../hooks/useCountBlink'
-import { PullScrollView, PullContext } from './PullPane'
+import { PullScrollView } from './PullPane'
 
 const AnimatedPullScrollView = Animated.createAnimatedComponent(PullScrollView)
 import { Text, TextInput } from './AppText'
 import { t, tg, genderize, isRTL } from '../i18n'
 import { ageFromTitle, nameFromTitle } from '../lib/profileTitle'
-import { BIO_MAX } from '../lib/bio'
+import { BIO_MAX, BIO_EDIT_LINES } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import { buildFamilySegments } from './FamilyCard'
-import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, HeightIcon, SmokeIcon, PresenceDot, type ChipTone } from './Chip'
-import { ChatIcon, ShieldIcon, GroupsIcon, ChevronEndIcon, PlusIcon } from './icons'
+import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, CHIP_BLOCK_SEAM_PAD, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, HeightIcon, SmokeIcon, PresenceDot, type ChipTone } from './Chip'
+import { ChatIcon, ShieldIcon, GroupsIcon, ChevronEndIcon } from './icons'
 import type { TapPoint } from './TapMenu'
 import { sharedCircle, useMyFriendCount } from '../lib/circles'
 import { RoundButton } from './RoundButton'
 import { SheetTitle } from './BottomSheet'
 import { OptionStrip, type StripOption } from './OptionStrip'
 import { EditableText } from './EditableText'
-import { XS, SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, SHEET_GAP, DOCK_SHADOW, TAP_SLOP, PHOTO_WAIT_DELAY_MS, chromeTop, lh, bottomGap } from '../tokens'
-import { PAGE, PHOTO_CHROME, INK, SURFACE, WHITE, INK_DIM, INK_SUBTLE, LIFT_SHADOW } from '../colors'
+import { XS, SM, MD, LG, RADIUS, ICON, TEXT, WEIGHT, ROUND_BUTTON_SIZE, SHEET_GAP, RISE_SHADOW, TAP_SLOP, PHOTO_WAIT_DELAY_MS, chromeTop, lh, bottomGap } from '../tokens'
+import { PAGE, INK, SURFACE, WHITE, INK_DIM, INK_SUBTLE } from '../colors'
 import { formatProximity, isDistanceHere } from '../lib/units'
 import { formatHeight } from '../lib/height'
 import { isLastSeenJustNow } from '../lib/lastSeen'
@@ -35,6 +35,7 @@ import { useSecsLeft, formatClock } from '../lib/countdown'
 // the HIDDEN/VISIBLE toggle.
 
 const SCROLL_TO_END_MS = 1400
+
 
 // One round icon-button overlaid on the hero photo. CardActionStack stacks
 // these vertically growing upward from the action's anchor. Default usage is a
@@ -129,7 +130,17 @@ function InviteCountdown({ countdown, color }: { countdown: CardCountdown; color
 // A card that ARRIVES with a clock on it does not play the slide: it is not a
 // change, it is what this card has always been. Only a state changing under a
 // card the user is already looking at is one.
-function useTrailing(active: boolean) {
+//
+// AND THE BLOCK IS PAINTED BEFORE IT IS MOVED (user directive 2026-08-03). The
+// clip's width is the CONTENT's own measured width, so a slide started on the
+// same frame the content mounts is a slide against a box that is still 0 wide:
+// the first frames move nothing, the measurement lands mid-flight and the tile
+// jumps to catch up, which reads as the growth and the render happening at once
+// rather than as a block emerging. So a host that measures (`awaitReady`) holds
+// the slide until its content has reported a width, and only then does anything
+// move. A card that arrives with the block already on it is unaffected: it plays
+// no slide, and the clip simply paints nothing until the width is known.
+function useTrailing(active: boolean, awaitReady = false) {
   const [mounted, setMounted] = useState(active)
   // Whether this block is ARRIVING as a change rather than being what the card
   // has always carried — the same fact the slide is gated on, handed to the
@@ -137,12 +148,22 @@ function useTrailing(active: boolean) {
   const [announce, setAnnounce] = useState(false)
   const progress = useSharedValue(active ? 1 : 0)
   const settled = useRef(false)
+  // A slide waiting for the content to say how wide it is (awaitReady hosts).
+  const pendingIn = useRef(false)
+  const onReady = useCallback(() => {
+    if (!pendingIn.current) return
+    pendingIn.current = false
+    progress.value = withTiming(1)
+  }, [])
   useEffect(() => {
     if (active) {
       setAnnounce(settled.current)
       setMounted(true)
-      progress.value = settled.current ? withTiming(1) : 1
+      if (!settled.current) progress.value = 1
+      else if (awaitReady) pendingIn.current = true
+      else progress.value = withTiming(1)
     } else if (settled.current) {
+      pendingIn.current = false
       progress.value = withTiming(0, undefined, finished => {
         'worklet'
         if (finished) runOnJS(setMounted)(false)
@@ -152,14 +173,16 @@ function useTrailing(active: boolean) {
     }
     settled.current = true
   }, [active])
-  return { mounted, announce, progress }
+  return { mounted, announce, progress, onReady }
 }
 
-function CardTrailing({ color, progress, announce, countdown, onMessage, trailingLabel, trailingAction }: {
+function CardTrailing({ color, progress, announce, onReady, countdown, onMessage, trailingLabel, trailingAction }: {
   color: string
   progress: SharedValue<number>
   /** This block is arriving as a change, not as what the card came up with. */
   announce: boolean
+  /** Says the content has laid out — the slide may not start before it. */
+  onReady: () => void
   countdown?: CardCountdown
   onMessage?: () => void
   trailingLabel?: string
@@ -172,6 +195,10 @@ function CardTrailing({ color, progress, announce, countdown, onMessage, trailin
     setWidth(cur => (Math.abs(cur - w) < 0.5 ? cur : w))
   }, [])
   const clip = useAnimatedStyle(() => ({ width: width * progress.value }), [width])
+  // The slide is released only once the measured width has been COMMITTED — the
+  // clip's style is rebuilt with it, so releasing on the layout callback itself
+  // would start the run against a box the UI thread still reads as 0 wide.
+  useEffect(() => { if (width > 0) onReady() }, [width, onReady])
   // WHAT THIS SLOT IS SAYING, AND IT BLINKS WHEN THAT CHANGES (user directive
   // 2026-08-02). A clock starting and a clock running OUT — the moment the
   // countdown is replaced by the word for what happened — are the two changes a
@@ -244,37 +271,36 @@ function CardActionStack({ actions }: { actions: Array<CardAction & { onPress: (
 // becomes the editor: a multiline TextInput styled byte-identically to the
 // read-only bio Text, so when it isn't focused it looks exactly like static
 // text. Tapping anywhere drops the caret at that character natively. While
-// focused, a footer bar under the field carries the char counter and an
-// explicit Update button (enabled only on a saveable change) — the ONLY save
-// path. Leaving the field without pressing it (keyboard dismissed / tap
-// outside / focus lost) discards the edit and reverts to the last committed
-// value, same as sub-min input. Nothing is saved on blur.
+// focused there is no chrome at all — LEAVING THE FIELD IS THE SAVE (user
+// directive 2026-08-03), by whichever route ended the edit: keyboard dismissed,
+// tap outside, focus lost. There is no Update button anywhere in the app.
 export type BioEdit = {
   /** Last committed bio (server truth, '' when unset). */
   value: string
   /** Server round-trip in flight — locks the field. */
   saving?: boolean
-  /** Called with the normalized bio when Update is pressed, only when it
-   * changed. `null` is a CLEARED bio — a real answer since 2026-07-31, when
-   * the bio stopped being required at all. */
+  /** Called with the normalized bio when the edit ENDS, only when it changed.
+   * `null` is a CLEARED bio — a real answer since 2026-07-31, when the bio
+   * stopped being required at all. */
   onCommit: (next: string | null) => void
 }
 
 function BioField({
   edit,
   isMale,
-  onFocusRequested,
+  onEditStart,
   onPhoto = false,
 }: {
   edit: BioEdit
   /** Whose card this is, for the placeholder's gendered verb. Only ever the
    * user's own — the field is editable on the self preview alone. */
   isMale?: boolean | null
-  /** Ask the parent card to scroll this field above the keyboard. */
-  onFocusRequested: () => void
-  /** When rendered inside the on-photo bio chip (own-profile preview), the
-   * field styles itself byte-for-byte like the static remote bio: purple
-   * INK, START-aligned, larger. Otherwise it matches the white fallback
+  /** The edit started — the card suspends the reel's paging. It does NOT
+   * scroll: no text field in the app moves its page. */
+  onEditStart: () => void
+  /** When rendered inside the on-photo bio (own-profile preview), the field
+   * styles itself byte-for-byte like the static remote bio: WHITE ink on the
+   * photograph, START-aligned, larger. Otherwise it matches the white fallback
    * bubble (own-profile editor with a single photo). */
   onPhoto?: boolean
 }) {
@@ -296,12 +322,18 @@ function BioField({
       allowEmpty
       max={BIO_MAX}
       placeholder={genderize(t('bio.placeholder'), isMale)}
-      updateLabel={t('bio.update')}
       // On-photo: omitted, so the editor follows the writing direction exactly
       // like the static bio it must be pixel-identical to. The white fallback
       // bubble is centred text, so its editor is too.
       textAlign={onPhoto ? undefined : 'center'}
-      onFocusRequested={onFocusRequested}
+      onEditStart={onEditStart}
+      // FIVE LINES WHILE EDITING (user directive 2026-08-03). The bio sits at
+      // the bottom of a photo whose page is the whole screen, so a field that
+      // grew with every line would run off the bottom of that page — and the
+      // reel, being paged photos, has nothing under the last page to scroll it
+      // back up with. Capped, the field is always a known height and stays
+      // where the photo puts it.
+      maxLines={BIO_EDIT_LINES}
       inputStyle={[onPhoto ? styles.photoBioText : styles.aboutText, styles.bioInput]}
       footerStyle={styles.bioFooter}
       hintStyle={styles.bioHint}
@@ -568,7 +600,21 @@ type MatchCardProps = {
 // top of the scroll and for hardware back. There is no such card any more: what
 // it said is a line in the strip, permanently on screen. Nothing outside drives
 // this scroll, so there is no ref to hold.)
-export function MatchCard({
+// THE CARD IS NOT REBUILT BECAUSE SOMETHING ELSE ON THE PAGE CHANGED (measured
+// 2026-08-03). This is the heaviest tree in the app — a reel of full-bleed
+// photographs, the merged fact tile with its measured rows, the heading chip —
+// and it lives inside home, whose every popup, count, tick and overlay flip is a
+// state change on that one component. Unmemoized, raising a popup rebuilt the
+// whole card first: on the emulator the dock's search key spent 229ms in React
+// before the sheet was even told to open, and 441ms before it could lay out and
+// begin its 200ms entrance. Nothing the user sees in that time moves, which is
+// what "it takes a second to open" was.
+//
+// A memo is only worth what its PROPS are worth: every host must hand it stable
+// identities (home wraps its actions/countdown/trailing objects and its two
+// per-card callbacks in useMemo/useCallback for exactly this). A prop rebuilt
+// inline each render defeats this silently — no error, just the old cost back.
+const MatchCardBase = ({
   match,
   bottomInset = 0,
   hideTime = false,
@@ -593,7 +639,7 @@ export function MatchCard({
   cardHeight,
   chromeInset = 0,
   bottomChrome = false,
-}: MatchCardProps) {
+}: MatchCardProps) => {
   // (The bio's padding box used to be pulled from `useChipPadding` here, so the
   // oversized tile could not drift from the pill chips beside it. Those chips are
   // BLOCKS now and the bio is one too, so its box is the block's — the gutter on
@@ -602,7 +648,7 @@ export function MatchCard({
   //
   // The chip's trailing block, and whether it is on screen — it stays mounted
   // through its own slide back into the name (see useTrailing).
-  const trailing = useTrailing(!!(countdown || onMessage || trailingAction))
+  const trailing = useTrailing(!!(countdown || onMessage || trailingAction), true)
   // Top of the shell's floating chrome: the card's heading row hangs from the
   // same line, so the two read as one row. `chromeTop()` in tokens is where that
   // line is stated — the same one the hamburger and a sheet's close X hung from.
@@ -662,11 +708,11 @@ export function MatchCard({
   const [chipsHidden, setChipsHidden] = useState(false)
   // Mirror of chipsHidden the scroll handler reads without re-subscribing.
   const chipsHiddenRef = useRef(false)
-  // ONE progress value drives the whole toggle: 1 = the info set is up (full
-  // size), 0 = it is away (zoomed to nothing). It IS the scale — see
-  // chipsAnimStyle — so every group in the set leaves and returns on the same
-  // frame, and the transition rides the framework's default withTiming curve,
-  // an ease-in-out, which is what makes it start and land without a snap.
+  // ONE progress value drives the whole toggle: 1 = the info set is up, 0 = it
+  // is away (slid off the bottom of the card). Every group in the set reads it,
+  // so they leave and return on the same frame, and the transition rides the
+  // framework's default withTiming curve — an ease-in-out, which is what makes
+  // it start and land without a snap.
   const chipsShown = useSharedValue(1)
   const toggleChips = useCallback(() => {
     const next = !chipsHiddenRef.current
@@ -691,21 +737,23 @@ export function MatchCard({
     setChipsHidden(false)
     chipsShown.value = 1
   }, [match.user_id])
-  // ZOOM ONLY — scale 1 → 0 and back, nothing else (user directive 2026-07-29).
-  // There is deliberately NO opacity here, and none may be added back: an
-  // on-photo chip wears LIFT_SHADOW, whose Android `elevation` shadow is drawn
-  // from the view's outline and does NOT inherit an animated opacity from its
-  // parent. A fade therefore held every chip's shadow at full strength for the
-  // whole transition and popped it off only at the end — a dark ghost of the
-  // column that stayed behind and then vanished. A transform has no such hole:
-  // the shadow rides the same matrix as the view that casts it, so the tile and
-  // its lift leave together.
+  // ZOOM ONLY — scale 1 → 0 and back, nothing else (user directive 2026-07-29,
+  // restored 2026-08-03 after an afternoon as a straight drop off the bottom of
+  // the card). There is deliberately NO opacity here, and none may be added
+  // back: an on-photo chip used to wear a shadow with an Android `elevation`, which
+  // is drawn from the view's outline and does NOT inherit an animated opacity
+  // from its parent. A fade therefore held every chip's shadow at full strength
+  // for the whole transition and popped it off only at the end — a dark ghost of
+  // the column that stayed behind and then vanished. A transform has no such
+  // hole: the shadow rides the same matrix as the view that casts it, so the
+  // tile and its lift leave together.
+  //
   // Each group that wears this style sets its own `transformOrigin` in the
   // stylesheet, always the corner it is PINNED to: the fact column and the bio
-  // tile into their bottom-START corner, the heading chips into the top-END
-  // corner. Never the default centre — a box that spans the photo's width would
-  // pull its contents sideways as it shrank, so the zoom would read as a drift,
-  // or as the text imploding mid-photo instead of the info set clearing off it.
+  // tile into their bottom-START corner. Never the default centre — a box that
+  // spans the photo's width would pull its contents sideways as it shrank, so
+  // the zoom would read as a drift, or as the text imploding mid-photo instead
+  // of the info set clearing off it.
   const chipsAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: chipsShown.value }],
   }))
@@ -798,7 +846,7 @@ export function MatchCard({
   // the two read as one movement rather than a sequence.
   const floatingAction = useTrailing(showFloatingAction)
   // ZOOM ONLY, for the reason the info set's toggle is zoom only: the round
-  // button wears LIFT_SHADOW, and an Android `elevation` shadow is drawn from
+  // button used to wear an Android `elevation` shadow, which is drawn from
   // the view's outline and does NOT inherit an animated opacity — a fade would
   // leave a dark ghost of the circle behind and pop it off at the end. The
   // wrapper hugs the button, so the default CENTRE origin is the circle's own
@@ -832,13 +880,32 @@ export function MatchCard({
   // drawn navigation bar would swallow these buttons whole (the 3-button Redmi,
   // 2026-07-29). See the `bottomChrome` prop.
   const overlayBottomOffset = bottomChrome ? MD : bottomGap(safeBottomInset, MD)
-  // The extra lift under the bottom-START info (fact chips AND the bio tile)
-  // exists ONLY to clear the floating action's lane (user directive 2026-07-30):
-  // a card with no floating action has nothing down there to clear, so its
-  // chips end at the SAME ordinary gap off the bottom of the screen as every
-  // other bottom-anchored thing in the app. One value for both groups, so the
-  // chip column and the bio tile can never sit at different heights.
-  const infoBottomLift = showFloatingAction ? LG : 0
+  // THE BOTTOM-START INFO ENDS AT THE SAME HEIGHT ON EVERY CARD (user directive
+  // 2026-08-03, read off the own-profile preview: "the gap under the kids row is
+  // not the same as the buttons, it is a bit too low — and the bio too"). It
+  // used to be the floating action's clearance and nothing else (`showFloating
+  // Action ? LG : 0`, 2026-07-30), so a card with no round button — my OWN, the
+  // one card in the app that never has one — dropped its fact tile and its bio a
+  // whole LG below where every other card puts them, and below the line every
+  // bottom-anchored control in the app stands on. What the lift clears is a lane
+  // that belongs to the card, not to whether this particular state happens to
+  // have something to press in it. One value for both groups, so the chip column
+  // and the bio tile can never sit at different heights.
+  //
+  // And the lift is XS: at the round action's full LG, and still at the card's
+  // own MD gutter, the set stood visibly clear of the line the rest of the card
+  // is bedded on ("you raised it too much", "smaller", same day), and a step
+  // below that (SM) it was still reading as air (2026-08-03). It is the last
+  // step of air over what stands below, not a measurement of the button that
+  // used to be the reason for it.
+  //
+  // AND A CARD WITH THE ROUND ACTION ON IT PAYS ONE STEP MORE (user directive
+  // 2026-08-03): the chip column and the button stand on the same line, so the
+  // set has a 48dp circle beside it rather than open photo, and it needs the
+  // extra air under it to read as bedded rather than as crowded against the
+  // button's own foot. One value for both groups still, so the chip column and
+  // the bio tile can never sit at different heights.
+  const infoBottomLift = showFloatingAction ? XS + MD : XS
   const ready = effectiveCardH > 0
   const timeIso = match.last_seen
   // Icon = the subject's (B = match) anchor (pin/home/work). The text is a
@@ -948,16 +1015,17 @@ export function MatchCard({
   const endsWithPhoto = sections.length > 0 && sections[sections.length - 1].type === 'photo'
   const scrollRef = useAnimatedRef<any>()
   const scrollYRef = useRef(0)
-  // The pull pane (page1/page2) provides this context. `pullEngaged` is a
-  // UI-thread flag, true for the whole life of a pull-down drag; `pullY` is
-  // the live pull offset. While engaged we pin the inner scroll to offset 0
-  // (see the derived value below) so a drag — in particular a down-then-up
-  // "cancel" — can't leak into the scroll content before the JS-thread
-  // scroll-disable lands. Both undefined for callers with no pull frame
-  // (the hidden preloader / the profile sheet).
-  const pullCtx = useContext(PullContext)
-  const pullEngaged = pullCtx?.pullEngaged
-  const pullY = pullCtx?.pullY
+  // (A SECOND PIN STOOD HERE, and it is what made a card page come down with a
+  // JUDDER where a circle page came down clean — user report 2026-08-03, on the
+  // profile preview. It held this reel at offset 0 on every frame of a pull;
+  // `PullScrollView`, the wrapper this reel already runs on, holds it at the
+  // offset the pull ENGAGED at, on every frame of the same pull. Two worklets
+  // writing `scrollTo` on one scroll view, to different targets, is the reel
+  // being pulled between them every frame. The wrapper's is the right one and
+  // the only one: it belongs to the app's one scroll surface, so a card and a
+  // roster are held the same way, and holding where the finger started is what a
+  // pull that begins mid-reel needs — pinning to 0 also yanked the reel back to
+  // the first photo the moment the drag began.)
 
   // ── Inline-bio keyboard handling ─────────────────────────────────────────
   // Almost none, by design. The bio bubble is a TextInput inside this scroll
@@ -970,7 +1038,7 @@ export function MatchCard({
   // paged reel: suspending paging while the field is focused, and re-pinning to
   // the current photo when the page height changes (both below).
   const bioFocusedRef = useRef(false)
-  const onBioFocusRequested = useCallback(() => {
+  const onBioEditStart = useCallback(() => {
     bioFocusedRef.current = true
     setBioFocused(true)
   }, [])
@@ -1002,6 +1070,40 @@ export function MatchCard({
     if (swallowTapWhileEditing()) return
     onTraitsTap?.()
   }, [swallowTapWhileEditing, onTraitsTap])
+  // HOW TALL, AND WHETHER THEY SMOKE, STAND WITH THE BIO (user directive
+  // 2026-08-03): the row is a row of the BIO's own tile now — above the
+  // paragraph, behind the same hairline that divides any two facts sharing one
+  // object — instead of a row of the fact set at the foot of the first photo.
+  // It is the same row in every other respect, so it is stated ONCE here and
+  // handed to whichever tile is hosting it: the bio's when there is a bio tile
+  // on the second photo, the fact set's when there is not (a card with one
+  // photo, or a stranger who wrote nothing). Both places are the same card, so
+  // the own-profile preview follows it too.
+  const traitsRow = heightLabel || smokesLabel ? (
+    <Chip
+      tone={heightLabel ? heightTone : smokesTone}
+      renderIcon={c => (heightLabel ? <HeightIcon color={c} /> : <SmokeIcon color={c} crossed={smokesNo} />)}
+      text={heightLabel || smokesLabel}
+      fact={heightLabel && smokesLabel
+        ? { label: smokesLabel, tone: smokesTone, renderIcon: ic => <SmokeIcon color={ic} crossed={smokesNo} /> }
+        : undefined}
+      onPress={onTraitsTap ? handleTraitsTap : undefined}
+    />
+  ) : self && onTraitsTap ? (
+    // The same invitation the empty family row is, in the same placeholder ink —
+    // and it carries NO MARK AT ALL (user directive 2026-08-03). It wore a plain
+    // plus for a day, on "the row states two facts, so there is no one glyph
+    // that is THE fact being added" — but the words already name both facts and
+    // the tile is already an empty thing to fill in, so the plus was a second
+    // way of saying the one thing the row says. A glyph naming one of the two
+    // (the span, the cigarette) would be worse still: it would annotate half the
+    // sentence beside it.
+    <Chip
+      tone="placeholder"
+      text={t('traits.title')}
+      onPress={handleTraitsTap}
+    />
+  ) : null
   const handleCircleTap = useCallback(() => {
     if (swallowTapWhileEditing()) return
     onCircleTap?.(circle?.count ?? 0)
@@ -1075,14 +1177,7 @@ export function MatchCard({
   const scrollAnimY = useSharedValue(0)
   const scrollAnimActive = useSharedValue(false)
   useDerivedValue(() => {
-    if (scrollAnimActive.value) { scrollTo(scrollRef, 0, scrollAnimY.value, false); return }
-    // Reading pullY makes Reanimated re-run this worklet on every frame of a
-    // pull. While the pull is engaged, hold the inner content pinned at the
-    // top every frame — the synchronous UI-thread guard the async
-    // `scrollEnabled` toggle can't provide (without it a fast pull-and-release
-    // sometimes left the card body scrolled a few px down).
-    void pullY?.value
-    if (pullEngaged?.value) scrollTo(scrollRef, 0, 0, false)
+    if (scrollAnimActive.value) scrollTo(scrollRef, 0, scrollAnimY.value, false)
   })
   const slowScrollToEnd = useCallback(() => {
     const target = Math.max(0, contentHRef.current - viewportHRef.current)
@@ -1100,6 +1195,13 @@ export function MatchCard({
     cancelAnimation(scrollAnimY)
     scrollAnimActive.value = false
   }, [])
+  // (THE BIO USED TO SCROLL THE REEL TO ITS OWN END when the keyboard arrived,
+  // so that the field's Update button cleared it. There is no Update button
+  // any more — leaving the field is the save — and a field that moves the page
+  // under the finger is exactly what the user asked to be rid of (user
+  // directive 2026-08-03, restated the same evening after the scroll was tried
+  // again on the own card: it is not wanted there either). The bio is edited
+  // where it is drawn.)
   // (The status card's whole entrance lived here: a slide-in driven off its
   // measured height, an animated spacer pushing the hero photo down in lockstep,
   // and a scroll-to-top fired the instant the block appeared. All of it is gone
@@ -1110,9 +1212,9 @@ export function MatchCard({
   // footerBlock can claim the leftover vertical space when content < viewport.
   // When footerBlock owns the bottom we skip the container's paddingBottom —
   // the footer block already includes its own safe-area padding.
-  // No keyboard term: the reel's pages shrink with the page, so the bio chip at
-  // the bottom of photo 2 is still exactly one page down and reachable without
-  // any extra room made for the keyboard.
+  // No keyboard term: editing the bio scrolls the reel to its own END (below),
+  // so the room the tile needs is the clearance it already keeps off the photo's
+  // bottom edge, not extra content made for the keyboard.
   const contentPaddingBottom = footerBlock ? 0 : bottomInset + (endsWithPhoto ? 0 : MD)
 
   return (
@@ -1136,8 +1238,27 @@ export function MatchCard({
         // Rejecting the measurement leaves the last one taken with the keyboard
         // down, which IS the card's full height — so there is nothing to
         // restore when the keyboard leaves.
-        if (keyboardOpenRef.current && cardH > 0) return
-        setCardH(e.nativeEvent.layout.height)
+        //
+        // WHAT IS REJECTED IS A SHRINK, NEVER A GROWTH (2026-08-03, off the
+        // own-profile preview coming up with its photos ~2/3 of the screen
+        // tall). A keyboard can only ever make this box SHORTER, so a taller
+        // measurement is never the keyboard and always the truth — and there
+        // are two routes by which the short one would otherwise be frozen for
+        // the surface's whole life. `useKeyboardOpen` flips false at the END of
+        // the hide animation, i.e. AFTER the last layout event of that
+        // animation, so the one event carrying the restored full height is the
+        // one the guard throws away and nothing lays out again. And this card
+        // lives in a `keepMounted` sheet painted at launch, so a launch or a
+        // dev reload with the keyboard up gives it its FIRST measurement short
+        // (cardH is 0, so the guard lets it through) and no later event ever
+        // corrects it. The reel then pages at that height for ever: the first
+        // photo stops short of the bottom of the screen with the second showing
+        // under it. A ratchet UPWARD keeps everything the rule was for — the
+        // mid-animation frames and the re-flow under a resting offset are all
+        // shrinks — and fixes both.
+        const h = e.nativeEvent.layout.height
+        if (keyboardOpenRef.current && cardH > 0 && h <= cardH) return
+        setCardH(h)
       }}
     >
       <AnimatedPullScrollView
@@ -1166,6 +1287,19 @@ export function MatchCard({
         // crisply. Applies to both the pagingEnabled and snapToOffsets branches.
         disableIntervalMomentum
         decelerationRate="fast"
+        // SCROLLING THE REEL AWAY FROM THE BIO ENDS THE EDIT (user directive
+        // 2026-08-03). This is the app's ONE exception to "scrolling never
+        // closes the keyboard", and it is not really one: that rule exists so a
+        // field covered by the keyboard can be brought into view by scrolling —
+        // here the scroll is not moving TOWARD the field, it is a REEL of
+        // full-screen photos being paged away from it, which is the user saying
+        // he is done writing. And the paging itself is suspended for as long as
+        // the editor is open (`pagingAllowed`), so the reel does not become a
+        // reel again until the keyboard is gone: dismissing here is what hands
+        // it back. `onScrollBeginDrag` and not `onScroll`, so only a FINGER ends
+        // the edit — the reveal, the pin and every programmatic scroll leave it
+        // alone.
+        onScrollBeginDrag={() => { if (bioFocusedRef.current) Keyboard.dismiss() }}
         onScroll={(e: any) => {
           const y = e.nativeEvent.contentOffset.y
           scrollYRef.current = y
@@ -1248,7 +1382,10 @@ export function MatchCard({
                   is the chips' own corner. On the full-width overlay the same
                   scale would have dragged the column toward the middle of the
                   screen instead of shrinking it in place. */}
-              <Animated.View pointerEvents="box-none" style={[styles.chipsStack, chipsAnimStyle]}>
+              <Animated.View
+                pointerEvents="box-none"
+                style={[styles.chipsStack, chipsAnimStyle]}
+              >
                 {/* ONE TILE, NOT THREE (user directive 2026-07-30): these facts
                     are one set of facts about one person, so they share a single
                     white tile and the app's hairline stands between the KINDS —
@@ -1328,33 +1465,7 @@ export function MatchCard({
                       Its ORDER in the tile is height/smoking → kids → where and
                       when: the body facts stand with the other things true of
                       this person alone, and the where/when is last as ever. */}
-                  {heightLabel || smokesLabel ? (
-                    <Chip
-                      tone={heightLabel ? heightTone : smokesTone}
-                      renderIcon={c => (heightLabel ? <HeightIcon color={c} /> : <SmokeIcon color={c} crossed={smokesNo} />)}
-                      text={heightLabel || smokesLabel}
-                      fact={heightLabel && smokesLabel
-                        ? { label: smokesLabel, tone: smokesTone, renderIcon: ic => <SmokeIcon color={ic} crossed={smokesNo} /> }
-                        : undefined}
-                      onPress={onTraitsTap ? handleTraitsTap : undefined}
-                    />
-                  ) : self && onTraitsTap ? (
-                    // The same invitation the empty family row is, in the same
-                    // placeholder ink — except that its mark is a PLAIN PLUS
-                    // (user directive 2026-08-02): the row states two facts, so
-                    // there is no one glyph that is "the" fact being added, and
-                    // the plus says what the tap does instead. It takes the
-                    // optical half-step up from the chip's own ICON.sm for the
-                    // reason the composer's plus does: its cross paints only the
-                    // middle 14 of its 24 box, so at the size the fact glyphs
-                    // take it would read as the smaller mark.
-                    <Chip
-                      tone="placeholder"
-                      renderIcon={c => <PlusIcon color={c} size={ICON.md} />}
-                      text={t('traits.title')}
-                      onPress={handleTraitsTap}
-                    />
-                  ) : null}
+                  {bioOnSecondPhoto ? null : traitsRow}
                   {familySegments.length ? (
                     <Chip
                       renderIcon={c => <KidsIcon color={c} />}
@@ -1450,11 +1561,35 @@ export function MatchCard({
                     chipsToggleable && chipsAnimStyle,
                   ]}
                 >
-                  {bioEditable && bioEdit ? (
-                    <BioField edit={bioEdit} isMale={match.is_male} onFocusRequested={onBioFocusRequested} onPhoto />
-                  ) : (
-                    <Text style={styles.photoBioText}>{match.bio}</Text>
-                  )}
+                  {/* ONE TILE, TWO ROWS (user directive 2026-08-03). The body
+                      facts and the paragraph are the same white block, divided
+                      by the app's one hairline — so the tile is literally
+                      `ChipStack`, the very object the fact set at the foot of
+                      the first photo is, and it owns the ground, the corner,
+                      the lift and the rule. The bio row therefore states no
+                      fill of its own; what it does state is its PADDING, being
+                      the one row here that is not a `Chip` and so cannot read
+                      the stack's context: the block's gutter on its outer
+                      edges, half of it where it meets the seam the traits row
+                      pays the other half of. It STRETCHES, unlike a fact row
+                      that hugs its own words: a paragraph is the width of the
+                      tile, which is what keeps the bio card the full-width
+                      block it has always been. */}
+                  <ChipStack onPhoto>
+                    {traitsRow}
+                    <View
+                      style={[
+                        styles.photoBioBody,
+                        { paddingTop: traitsRow ? CHIP_BLOCK_SEAM_PAD : CHIP_BLOCK_PAD },
+                      ]}
+                    >
+                      {bioEditable && bioEdit ? (
+                        <BioField edit={bioEdit} isMale={match.is_male} onEditStart={onBioEditStart} onPhoto />
+                      ) : (
+                        <Text style={styles.photoBioText}>{match.bio}</Text>
+                      )}
+                    </View>
+                  </ChipStack>
                 </Animated.View>
               ) : null}
             </Animated.View>
@@ -1467,7 +1602,7 @@ export function MatchCard({
               >
                 <View style={styles.aboutBubble}>
                   {bioEditable && bioEdit ? (
-                    <BioField edit={bioEdit} isMale={match.is_male} onFocusRequested={onBioFocusRequested} />
+                    <BioField edit={bioEdit} isMale={match.is_male} onEditStart={onBioEditStart} />
                   ) : (
                     <Text style={styles.aboutText}>{section.value}</Text>
                   )}
@@ -1529,17 +1664,38 @@ export function MatchCard({
           pointerEvents="box-none"
           style={[styles.topStartFixed, chromeRowTop > 0 && { paddingTop: chromeRowTop }]}
         >
-          {/* WHO THIS IS NEVER LEAVES THE SCREEN (user directive 2026-07-30).
-              This one chip is OUT of the tap-toggle: a tap on the photo zooms the
-              fact chips and the bio card away, and the heading stays exactly
-              where it is. It carries the one number on the screen with a deadline
-              on it and the only way to the state's message — a face with nothing
-              naming it, and a clock a stray tap could take away, are both worse
-              than the sliver of photo this covers. The tile itself is inert; only
-              the pieces INSIDE it act, each its own press target. */}
-          <View style={styles.identityChipWrap}>
+          {/* WHAT THE STATE HAS TO SAY NEVER LEAVES THE SCREEN (user directives
+              2026-07-30 + 2026-08-03). The tile used to be OUT of the tap-toggle
+              entirely — the fact chips and the bio zoomed away and the heading
+              stayed whole — because the one number with a deadline on it and the
+              only way to the state's message may not be taken away by a stray
+              tap. What may is the NAME: it is written on the face under it. So
+              the tap closes the tile down to its readout (`collapsed`) instead of
+              leaving the whole heading standing, and the clock, chat's "End chat"
+              and the mark that opens the message are exactly as untouchable as
+              they were. The tile itself is inert; only the pieces INSIDE it act,
+              each its own press target. */}
+          {/* WITH NOTHING LEFT ON IT, THE TILE GOES WITH THE REST OF THE SET.
+              A heading whose state has nothing to say is a name and a flag and
+              no more, so once the name has closed there is an empty pill left
+              standing on the photograph — it takes the info set's own zoom, into
+              the corner it is pinned to, and leaves with everything else. A tile
+              that DOES carry a clock never zooms: it closes around it. */}
+          <Animated.View
+            style={[
+              styles.identityChipWrap,
+              chipsToggleable && !trailing.mounted && chipsAnimStyle,
+            ]}
+          >
             <Chip
               text={identityChipText}
+              // THE NAME CLOSES, THE STATE STAYS (user directive 2026-08-03):
+              // the tap that zooms the fact set away slides the flag, the name
+              // and the rule shut into the tile's start edge, and the clock (or
+              // "End chat", or the mark that opens the message) is left standing
+              // in a tile that has closed around it. Same tap, same curve, same
+              // statement as the rest of the set: give the photograph its room.
+              collapsed={chipsToggleable ? chipsHidden : undefined}
               tone="neutral"
               onPhoto
               // The state's own trailing fact, behind the chip's hairline rule:
@@ -1550,6 +1706,7 @@ export function MatchCard({
                     color={c}
                     progress={trailing.progress}
                     announce={trailing.announce}
+                    onReady={trailing.onReady}
                     countdown={countdown}
                     onMessage={onMessage}
                     trailingLabel={trailingLabel}
@@ -1574,12 +1731,14 @@ export function MatchCard({
               renderIcon={onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
               onIconPress={onReport}
             />
-          </View>
+          </Animated.View>
         </View>
       ) : null}
     </View>
   )
 }
+
+export const MatchCard = React.memo(MatchCardBase)
 
 // ── The bar under a profile card ───────────────────────────────────────────
 // THE block that stands under a full-screen profile card and carries what can be
@@ -1720,9 +1879,10 @@ const styles = StyleSheet.create({
   // OptionStrip's, and the air is set inline from the popup's own tokens. The
   // lift is THE DOCK'S (user directive 2026-07-31): this bar and home's dock are
   // one object, so the band hovers off what it stands over by exactly the same
-  // amount in both places. There is no rule along its top and there must never
-  // be one.
-  profileBar: { paddingHorizontal: MD, backgroundColor: SURFACE, boxShadow: DOCK_SHADOW },
+  // amount in both places — which since 2026-08-03 is the app's one lift for
+  // anything standing over what is beneath it. There is no rule along its top
+  // and there must never be one.
+  profileBar: { paddingHorizontal: MD, backgroundColor: SURFACE, boxShadow: RISE_SHADOW },
   // The popup's gap between what a thing IS and what can be done about it, here
   // between the circle's name and the strip of options. LG, not the popup's own
   // XL over a button row: the heading above this strip is a BLOCK — a face, a
@@ -1746,10 +1906,16 @@ const styles = StyleSheet.create({
   },
   // Wraps the name/age chip. flexShrink keeps the chip's shrink/wrap chain intact
   // through the extra View (a plain wrapper would otherwise hide the shrink hint
-  // and let a long name overflow the row). It carries NO transformOrigin: this
-  // chip is out of the tap-toggle and never zooms.
+  // and let a long name overflow the row).
+  //
+  // The transformOrigin is for the one case this tile zooms at all: a heading
+  // with no clock, no word and no mark on it, which the tap-toggle takes away
+  // with the rest of the info set (see the heading's render). It is the corner
+  // the tile is pinned to — top-START, PHYSICAL like every other origin here, so
+  // the horizontal half follows the app's reading direction.
   identityChipWrap: {
     flexShrink: 1,
+    transformOrigin: isRTL ? 'right top' : 'left top',
   },
   // The box the block emerges FROM: it clips, and its width is the animation
   // (see CardTrailing). Its height is the content's own, measured — a clipping
@@ -1849,27 +2015,18 @@ const styles = StyleSheet.create({
   // every side (`start` here; `end` + `bottom` set inline so both insets can
   // clear the floating action when there is one, and neither does when there is
   // not — the tile then ends at the same ordinary bottom gap as the chips). It is
-  // the SAME white tile as every other on-photo chip and round button
-  // (PHOTO_CHROME) just oversized — user directive 2026-07-28 — so it is the
-  // same tile in EVERY respect and not just in its fill (user directive
-  // 2026-07-30): the same RADIUS, the same gutter, the same padding box as the
-  // chips beside it and the same LIFT_SHADOW every on-photo tile casts.
+  // the SAME white tile as every other on-photo chip and round button, just
+  // oversized (user directives 2026-07-28 + 2026-07-30) — the same fill, the
+  // same RADIUS, the same block gutter (CHIP_BLOCK_PAD) and the same lift.
   //
-  // That box is the BLOCK's: the chip's gutter on every side (CHIP_BLOCK_PAD).
-  // The tile is a PARAGRAPH in a wide white block, and so are the fact rows
-  // stacked above it, so both take the air a block states rather than whatever a
-  // round chrome button has left over once a line of label is in it. It is still
-  // the chip's own constant and not a re-typed `MD`: the two tiles must move
-  // together, which is the whole reason the bio stopped declaring its own padding
-  // in the first place — and they did move together when the vertical was taken
-  // in for an afternoon on 2026-08-02 and put straight back.
+  // The tile itself is `ChipStack` since 2026-08-03 (the body facts stand above
+  // the paragraph, behind the stack's own hairline), so the fill, the corner,
+  // the gutter and the lift are all the stack's and this box states only WHERE
+  // the tile is — which is also how the two tiles are guaranteed to keep moving
+  // together.
   photoBioCard: {
     position: 'absolute',
     start: MD,
-    backgroundColor: PHOTO_CHROME,
-    borderRadius: RADIUS,
-    padding: CHIP_BLOCK_PAD,
-    ...LIFT_SHADOW,
     // Same corner the fact column collapses into (user directive 2026-07-29):
     // the bio used to zoom around its own centre, which on a tile this wide read
     // as the text imploding in the middle of the photo rather than the info set
@@ -1888,6 +2045,18 @@ const styles = StyleSheet.create({
   // above the fact chips beside it, which say things about the same person. At
   // `md` it matches every other on-photo chip, and it matches the fallback bubble
   // (`aboutText`) that renders the same bio when there is no second photo.
+  // BARE ON THE PHOTOGRAPH, like the fact set beside it (user directive
+  // 2026-08-03): white ink, and the shade that keeps it off the picture is on
+  // the CARD (photoBioCard) rather than here, so the inline editor's own field,
+  // caret and footer are covered by the same one declaration the text is.
+  // The bio's own row inside that stack: the block's gutter on the sides and the
+  // bottom (the top is the seam and is set inline), stretched to the tile
+  // because a paragraph is not a fact hugging its words.
+  photoBioBody: {
+    alignSelf: 'stretch',
+    paddingHorizontal: CHIP_BLOCK_PAD,
+    paddingBottom: CHIP_BLOCK_PAD,
+  },
   photoBioText: {
     fontSize: TEXT.md,
     color: INK,
@@ -1915,15 +2084,10 @@ const styles = StyleSheet.create({
     padding: 0,
     includeFontPadding: false,
   },
-  // Footer bar under the editor: the minimum-length hint on the start edge,
-  // Update button on the end edge (flips under RTL). Full bubble width so it
-  // reads as the editor's own toolbar rather than floating centered text.
+  // What is left under the editor once the Update button is gone (2026-08-03):
+  // the hint slot alone, and only on the rare frame it has something to say.
   bioFooter: {
     alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: MD,
     marginTop: MD,
   },
   bioHint: {

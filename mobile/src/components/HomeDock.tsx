@@ -1,13 +1,13 @@
 import { type ReactNode } from 'react'
-import { StyleSheet, View } from 'react-native'
+import { StyleSheet } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { Text } from './AppText'
 import { NotifyDot } from './RoundButton'
 import { OptionStrip, type StripOption } from './OptionStrip'
 import { useCountBlink } from '../hooks/useCountBlink'
 import { inkOffset, FONT_SCALE } from '../fonts'
-import { XS, MD, TEXT, WEIGHT, DOCK_SHADOW, MARK_SHADOW, PILL_RADIUS } from '../tokens'
-import { INK, INK_SUBTLE, PAGE, PHOTO_CHROME } from '../colors'
+import { MD, TEXT, WEIGHT, RISE_SHADOW, CARD_SHADOW, PILL_RADIUS } from '../tokens'
+import { INK, PAGE, PHOTO_CHROME, WHITE } from '../colors'
 
 // ── The dock — home's strip of four ────────────────────────────────────────
 //
@@ -35,10 +35,10 @@ import { INK, INK_SUBTLE, PAGE, PHOTO_CHROME } from '../colors'
 // between the strip and the page is a SHADOW (user directive 2026-07-30): the
 // band HOVERS over the page rather than being fenced from it, so the eye reads a
 // foreground the same colour as its background without a line having to say so.
-// `DOCK_SHADOW` in tokens.ts — a deeper, heavier stop than the bottom sheet's,
-// and deliberately so: a sheet is its own colour and needs only an edge, while
-// this band's colour IS the page's, so the shadow is doing the whole job on its
-// own. The glyphs and their words are `INK`, the app's one purple.
+// `RISE_SHADOW` in tokens.ts — the app's ONE lift, which this strip's own
+// numbers became (user directive 2026-08-03): a popup and a rising page each
+// used to carry a fainter one, and beside this band they read as flat. The
+// glyphs and their words are `INK`, the app's one purple.
 //
 // It is a FLOW SIBLING BELOW page1, never a layer over it (see home.tsx): the
 // match card is laid out in the space above this strip and clipped at its top
@@ -81,24 +81,14 @@ export type DockItem = {
    *
    *  A CHANGE IN IT BLINKS (user directive 2026-07-31) — see DockMarker. */
   count?: number
-  /** A SECOND quantity of the same kind, at the glyph's other top corner (user
-   *  directive 2026-08-01): the credits standing in a DEPOSIT — one that left
-   *  the wallet when I sent an invitation and is still ours until that
-   *  invitation resolves — beside the balance the key already states. It is
-   *  money the user has, and since 2026-07-31 money he can spend (a deposit pays
-   *  for an accept), so a wallet that showed only the balance was
-   *  under-reporting itself to the one person it belongs to.
-   *
-   *  A BARE NUMBER, FAINTER THAN THE BALANCE (user directive 2026-08-01: "some
-   *  transparency, so it doesn't look like the credits; and drop the plus, just
-   *  a number"). It opened as a "+1" — the sign saying "on top of the other
-   *  number" — and a sign is a second thing to read on a mark two digits wide.
-   *  What separates the two is STRENGTH: the balance is what I can spend and it
-   *  is full `INK`; the deposit is spoken for, and it says so by standing back.
-   *  Everything else stays the count's: the same size, the same slot geometry
-   *  mirrored, the same blink when it changes. `undefined` = no deposit; a
-   *  deposit of zero is not a deposit. */
-  held?: number
+  /** This count is people WAITING ON THE USER (the requests behind Circles), not
+   *  a tally he may look at when he likes (his watchers, his credits). It is the
+   *  quantity form of what the dot says, so it is painted the way the app paints
+   *  a thing that wants answering: the tile filled with the app's purple and the
+   *  digit white in it, instead of purple ink on the white tile. Same disc, same
+   *  place, same blink — only the two colours swap, which is the whole of what
+   *  ranks it above the numbers beside it (user directive 2026-08-03). */
+  urgent?: boolean
   /** This entry is not available to this user YET (Circles before the profile is
    *  built). The glyph AND its word fade together — one `opacity` on the whole
    *  key rather than a muted colour per part, so the two can never fade by
@@ -118,20 +108,17 @@ export function HomeDock({ items, bottom }: {
    *  very bottom edge, and only the glyphs are held clear of the navigation bar. */
   bottom: number
 }) {
-  const options: StripOption[] = items.map(({ key, label, icon, onPress, dimmed, count, held, badge }) => ({
+  const options: StripOption[] = items.map(({ key, label, icon, onPress, dimmed, count, badge, urgent }) => ({
     key, label, icon, onPress, dimmed,
     // What this key has to say, if anything. One component rather than the
     // ternary that used to stand here, because WHICH mark it is can change while
     // the dock is up (a request arrives behind a key that was clean) and the
     // number has to know it changed — see DockMarker.
-    // The deposit hangs UNDER it (user directive 2026-08-02), in the same corner
-    // rather than at the mirrored one: the two are one wallet said twice, so they
-    // read down a single column instead of straddling the glyph from either side.
-    // The SAME component again, so the two halves are the same mark down to the
-    // blink. Passed even when there is nothing to say, for the reason the marker
-    // itself always is — a deposit APPEARING is the change most worth marking,
-    // and a component that mounts with it has nothing to compare against.
-    marker: <DockMarker count={count} badge={badge} below={<DockMarker count={held} muted />} />,
+    // ONE MARK PER KEY (user directive 2026-08-03): the credits key carried the
+    // DEPOSIT as a second disc hanging under this one, and it is deleted. A key
+    // annotated twice reads as two tallies sharing a glyph; the deposit is a
+    // passing state and the credits ROW is where it is said, in words.
+    marker: <DockMarker count={count} badge={badge} urgent={urgent} />,
   }))
   return <OptionStrip options={options} style={[styles.strip, { paddingBottom: bottom }]} />
 }
@@ -156,23 +143,10 @@ export function HomeDock({ items, bottom }: {
 // compare against — if this component came and went with the digit. What must
 // never blink is the dock simply appearing with numbers already on it, so the
 // first value each marker ever sees is recorded and not announced.
-function DockMarker({ count, badge, muted, below }: {
+function DockMarker({ count, badge, urgent }: {
   count?: number
   badge?: boolean
-  /** Paint the number a step back from the key's own ink: the deposit half of
-   *  the wallet, which is an amount the user HAS but has already committed. Two
-   *  bare numbers on one glyph need something telling them apart, and strength
-   *  is the one difference that needs no character to say it — `INK_SUBTLE`, the
-   *  ramp's own "secondary label" step. Not `INK_HINT`: at 0.48 it lands on the
-   *  app's shut-door fade (DISABLED_OPACITY 0.45), and nothing here is shut. */
-  muted?: boolean
-  /** A second mark hanging under this one, in the same corner — the deposit
-   *  under the balance. It is OUT OF FLOW (`top:'100%'`), which is the whole
-   *  point: the slot centres the mark's box on the glyph's top edge, so anything
-   *  taking part in that box would move the mark it hangs from. Nothing here
-   *  measures anything — the pair stays honest at any font scale because the
-   *  lower mark is hung off the upper one's own bottom edge. */
-  below?: ReactNode
+  urgent?: boolean
 }) {
   // On the WRAPPER, not on the text: the digit is laid out by the marker slot
   // and only its paint changes, so nothing about the blink can move it. The
@@ -198,18 +172,11 @@ function DockMarker({ count, badge, muted, below }: {
   // left to guess from the app's direction it would measure a Hebrew letter body
   // (0.600 em against 0.714) and lift the digit by two and a half times what it
   // owes — worse than not correcting at all.
-  const mark = count != null ? (
-    <Animated.View style={[styles.countTile, muted && styles.countTileMuted, { transform: [{ translateY: -inkOffset(TEXT.sm, FONT_SCALE, String(count)) }] }, blinkStyle]}>
-      <Text style={[styles.count, muted && styles.countMuted]}>{count}</Text>
+  return count != null ? (
+    <Animated.View style={[styles.countTile, urgent && styles.countTileUrgent, { transform: [{ translateY: -inkOffset(TEXT.sm, FONT_SCALE, String(count)) }] }, blinkStyle]}>
+      <Text style={[styles.count, urgent && styles.countUrgent]}>{count}</Text>
     </Animated.View>
   ) : badge ? <NotifyDot style={styles.markerDot} /> : null
-  if (!below) return mark
-  return (
-    <View style={styles.markStack}>
-      {mark}
-      <View style={styles.markBelow}>{below}</View>
-    </View>
-  )
 }
 
 const styles = StyleSheet.create({
@@ -226,7 +193,7 @@ const styles = StyleSheet.create({
     // far less of it than a chip did, but the air reads well on its own and the
     // widest count still has somewhere to go.
     paddingHorizontal: MD,
-    boxShadow: DOCK_SHADOW,
+    boxShadow: RISE_SHADOW,
   },
   // The dot goes through the marker slot like the number does, so it is IN the
   // flow of the slot's inner box — its own component pins it absolutely (it is a
@@ -238,9 +205,10 @@ const styles = StyleSheet.create({
   // same white ground every other small tile in the app stands on, so a count
   // beside a glyph reads as an object lifted off the page rather than as two
   // digits floating on it — which is what it was against the strip's own PAGE
-  // tint. The lift is `MARK_SHADOW`, not the tiles' `LIFT_SHADOW`: a drop meant
-  // for a button under a single digit reads as the digit coming loose, and this
-  // one is symmetric because a disc beside a glyph has no side to rest on.
+  // tint. The lift is the app's ONE tile shadow, `CARD_SHADOW` (user directive
+  // 2026-08-03): symmetric and small, which is what a disc beside a glyph needs
+  // — it has no side to rest on, and a drop under a single digit would read as
+  // the digit coming loose.
   // WITH NO PADDING: the digit's own line box is the tile, so the mark
   // stays exactly the size the slot placed it at and the tile can never push a
   // count out past the strip's marker lane. The lift lives on the wrapper and
@@ -260,7 +228,7 @@ const styles = StyleSheet.create({
     borderRadius: PILL_RADIUS,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: MARK_SHADOW,
+    boxShadow: CARD_SHADOW,
   },
   // The quantity itself: ink and nothing else, at the caption's size and weight
   // so the key's two pieces of text are one family, in the glyph's own purple.
@@ -269,20 +237,13 @@ const styles = StyleSheet.create({
     fontWeight: WEIGHT.medium,
     color: INK,
   },
-  // The deposit's own step back. ONLY the colour changes — same size, same
-  // weight, same slot — so the pair reads as one wallet at two strengths rather
-  // than as two different kinds of mark.
-  countMuted: { color: INK_SUBTLE },
-  // THE DEPOSIT'S DISC IS THE PAGE'S OWN GROUND (user directive 2026-08-02): the
-  // balance is money to spend and stands on white, the deposit is money already
-  // committed and stands on the tint the strip itself is painted in, so the pair
-  // is one wallet at two strengths in its GROUND as well as in its ink. Only the
-  // colour changes — the same disc, the same lift, the same slot.
-  countTileMuted: { backgroundColor: PAGE },
-  // The column of two: the upper mark is the box the slot places, and the lower
-  // one is hung off its bottom edge and out of its flow, so the pair reads down
-  // one line without the balance moving because a deposit appeared. Centred on
-  // the mark above it, whichever of them is the wider number.
-  markStack: { alignItems: 'center' },
-  markBelow: { position: 'absolute', top: '100%', marginTop: XS },
+  // A COUNT THAT IS WAITING ON THE USER WEARS THE PURPLE (user directive
+  // 2026-08-03): the requests behind Circles are the one dock number that asks
+  // for something, so the disc is filled with the app's ink and the digit is
+  // white in it — the same fill the app gives every control it is asking to be
+  // pressed. Nothing else about the mark changes: same disc, same slot, same
+  // size, same blink, so the two colours swapping is the whole statement and the
+  // key is never annotated by a second, differently shaped object.
+  countTileUrgent: { backgroundColor: INK },
+  countUrgent: { color: WHITE },
 })

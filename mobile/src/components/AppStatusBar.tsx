@@ -1,8 +1,8 @@
 import { StatusBar } from 'expo-status-bar'
 
 // Single source of truth for the OS status bar appearance: it sets the GLYPH
-// colour and nothing else. The purple band behind the glyphs is painted by the
-// app itself (`StatusBarBand`), not by the OS.
+// colour and nothing else. The shade behind the glyphs is painted by the app
+// itself (`StatusBarBand` in `ScreenEdgeShade.tsx`), not by the OS.
 //
 // It sets ONLY `style` on purpose. The app runs edge-to-edge
 // (`android.edgeToEdgeEnabled: true`), where every bar-COLOUR API is a no-op:

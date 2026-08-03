@@ -20,6 +20,12 @@ import { DRAG_HANDLE } from '../tokens'
  *  It carries NO spacing of its own. Where it stands is the host's (a popup's
  *  top air, a header row's chrome line), exactly as a title's gap belongs to
  *  whatever comes next. */
+/** ONE bar, and it is the same bar in both hosts (user directive 2026-08-03):
+ *  the same ink, the same size, no variant. A chat that painted a white bar with
+ *  a halo of its own read as a different object at the top of a different kind
+ *  of page. What makes it legible over a conversation is not the mark but what
+ *  it STANDS ON — the strip of the page's own ground the bubbles stop under,
+ *  which is `SheetHeader`'s and not the handle's. */
 export function DragHandle({ style }: { style?: StyleProp<ViewStyle> }) {
   return <View style={[styles.bar, style]} pointerEvents="none" />
 }

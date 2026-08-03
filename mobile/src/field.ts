@@ -30,7 +30,7 @@
 
 import type { ViewStyle } from 'react-native'
 import { SURFACE, LINE } from './colors'
-import { RADIUS, STROKE } from './tokens'
+import { RADIUS, STROKE, CARD_SHADOW } from './tokens'
 
 export const OUTLINE_SKIN: ViewStyle = {
   borderWidth: STROKE.thin,
@@ -38,7 +38,18 @@ export const OUTLINE_SKIN: ViewStyle = {
   borderRadius: RADIUS,
 }
 
+// A FIELD IS LIFTED, NOT OUTLINED (user directive 2026-08-03): a shadow and a
+// rule are two ways of saying the same thing — this box is a surface standing on
+// the page — and a box that says it twice reads as drawn ON rather than lifted
+// off. So the typing surface takes the app's ONE tile shadow and NO border,
+// while `OUTLINE_SKIN` above keeps the rule for what genuinely has no fill to
+// lift (an outlined chip, an outlined button).
+//
+// A field that must state an ERROR puts the rule back itself, in `NEGATIVE`
+// (LoginForm): that is a STATE, and a coloured edge is how the app has always
+// said it.
 export const FIELD_SKIN: ViewStyle = {
-  ...OUTLINE_SKIN,
+  borderRadius: RADIUS,
   backgroundColor: SURFACE,
+  boxShadow: CARD_SHADOW,
 }

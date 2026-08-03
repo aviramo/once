@@ -69,7 +69,15 @@ export function buildFamilySegments(
   if (!family) return []
   const kids = family.kids ?? []
   const count = kids.length
-  const segments: ChipSegment[] = [{ text: familyBaseTitle({ hasKids: family.hasKids, count }, self) }]
+  // EVERY FACT IN THIS SENTENCE IS ONE PHRASE (user directive 2026-08-03): the
+  // kids and their ages together, having them or not together, wanting more or
+  // not together, free or not free this weekend together — and the whole thing
+  // one long chained sentence that breaks BETWEEN the facts, and only where
+  // there is no room left. Broken word by word, this label read as a paragraph
+  // that happened to be about a family: "אין לי" over "ילדים". A phrase is a
+  // unit of meaning, which no measurement can find in a string, so it is stated
+  // here, where the sentence is composed.
+  const segments: ChipSegment[] = [{ text: familyBaseTitle({ hasKids: family.hasKids, count }, self), phrase: true }]
 
   // Ages as one dense cluster of mini-chips, in kids order — only when at least
   // one age is known, so a profile with no ages set stays clean instead of a row
@@ -81,7 +89,7 @@ export function buildFamilySegments(
   const effIsForKids = isForKids !== undefined ? isForKids : (family.isForKids ?? null)
   if (effIsForKids != null) {
     // Glued to the lead with a vav connector ("ורוצה עוד"), no comma.
-    segments.push({ text: t('family.prefConnector') + familyPrefLabel(family.hasKids, effIsForKids, self) })
+    segments.push({ text: t('family.prefConnector') + familyPrefLabel(family.hasKids, effIsForKids, self), phrase: true })
   }
 
   const weekend = familyWeekendKidStatus(family.schedule, lang)

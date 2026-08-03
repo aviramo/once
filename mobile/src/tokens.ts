@@ -119,11 +119,20 @@ export const lh = (size: number): number => Math.round(size * FONT_LINE_RATIO)
 //
 // And it is the air over the KEYBOARD too, from this same call, because the page
 // ends at the keyboard's top edge exactly as it ends at the top of the band
-// (`KeyboardShrink` in app/_layout.tsx). One air, whatever furniture happens to
+// (`KeyboardSurface`, src/hooks/useKeyboard). One air, whatever furniture happens to
 // be standing below the page — which is why nothing in this path may be made
 // keyboard-aware.
 export const BOTTOM_AIR = LG
 export const BOTTOM_BAND_HINT_MAX = XL
+// The tallest a system bottom BAND can honestly be: Android's 3-button
+// navigation bar is 48, and nothing the app must clear at the bottom of the
+// window is taller. A reported inset above this is not furniture — it is the
+// KEYBOARD's inset leaking into the safe area (edge-to-edge + adjustResize:
+// WindowInsetsCompat folds the IME into the bottom inset on some devices), and
+// taking it at face value is permanent, because `useBottomInset` holds a
+// high-water mark: one chat session and the dock stood ~300dp off the bottom of
+// the screen for the rest of the run (user report 2026-08-03).
+export const BOTTOM_BAND_MAX = 64
 export const bottomGap = (safeInset: number, gap: number): number =>
   safeInset > BOTTOM_BAND_HINT_MAX
     ? Math.max(safeInset, gap)   // a drawn navigation bar: clear it in full
@@ -314,6 +323,7 @@ export const PAN_FAIL_OFFSET_Y = -8        // upward drag cancels
 // away again. One constant: every place that asks the question must ask it the
 // same way (PullScrollView's scroll sync AND its content-size correction).
 export const SCROLL_AT_TOP_PX = 8
+
 // HOW FAR A PULL MUST TRAVEL DEPENDS ON WHAT LETTING GO *DOES*, and there are
 // exactly two answers (see usePullBehavior's `weight`).
 //
@@ -324,12 +334,15 @@ export const SCROLL_AT_TOP_PX = 8
 // taken back, so it is deliberately expensive to make by accident.
 export const PULL_COMMIT_FRACTION = 0.5
 // A pull that merely TAKES A SURFACE AWAY — every overlay sheet, every Circles
-// page, chat — costs a fifth of the screen and honours a flick. Putting a page
-// away is reversible (the thing behind it is still there and re-opening it is
-// one tap), so it must be as cheap as putting a popup away: a `BottomSheet`
-// dismisses at SWIPE_DISMISS_PX (80) and a full-screen page asking for ~420px
-// instead is what made closing a group's settings or a chat feel like work.
-export const PULL_CLOSE_FRACTION = 0.2
+// page, chat, and every state of home's card that is NOT the skip — costs a
+// TENTH of the screen and honours a flick. Putting a page away is reversible
+// (the thing behind it is still there and re-opening it is one tap), so it must
+// be as cheap as putting a popup away: a `BottomSheet` dismisses at
+// SWIPE_DISMISS_PX (80), and a tenth of a phone screen is that same ~85px. A
+// fifth (~170px) still read as the surface INSISTING on springing back the
+// moment it was dragged (user report 2026-08-03), which is the one thing only
+// the skip is allowed to do.
+export const PULL_CLOSE_FRACTION = 0.1
 // Spring that settles a pulled card back to rest when released short of the
 // commit threshold (page1 skip / page2 decline). Seeded with the finger's
 // release velocity (see usePullBehavior) so the snap-back CONTINUES the drag's
@@ -361,6 +374,11 @@ export const LONG_PRESS_MS = 400
 // members-only popup, which offers the way out).
 export const DISABLED_OPACITY = 0.45
 
+// The app's one press fade, for a control that answers a finger by dimming (the
+// round button, home's centre disc). A FILLED purple control darkens its fill
+// to INK_PRESSED as well; the fade alone is barely visible on a big disc.
+export const PRESSED_OPACITY = 0.85
+
 // ── Paged lists ────────────────────────────────────────────────────────────
 // Rows a server-paged list asks for at a time (group browse / search).
 export const LIST_PAGE_SIZE = 20
@@ -382,6 +400,13 @@ export const SEARCH_DEBOUNCE_MS = 300
 // whose old raw number was closest.
 //
 //   fast — quick fades on small UI (chat bubble in, typing indicator in/out).
+//   rise — A SURFACE ARRIVING FROM BELOW, and its exit: every popup
+//          (BottomSheet) and every rising surface (RisingCard, so the pages and
+//          home's cards). It is the one motion the user waits ON — nothing is
+//          answerable until it lands — so it is a step under `base` (user
+//          directive 2026-08-03). It is a tier and not a one-off because the
+//          popups and the pages must arrive at the same speed: they are the same
+//          gesture from the user's side.
 //   base — the standard transition: screen/step slide, selection highlight,
 //          list-card mount/unmount, typing-dot pulse, segmented toggle.
 //   spin — one full 360° spinner revolution (looped, never a one-shot).
@@ -393,6 +418,7 @@ export const SEARCH_DEBOUNCE_MS = 300
 // retuning a duration must not silently retune an unrelated delay.
 export const MOTION = {
   fast: 150,
+  rise: 200,
   base: 300,
   spin: 600,
 } as const
@@ -405,6 +431,19 @@ export const MOTION = {
 // this slack, which covers Realtime propagation + the card slide-in. Sized far
 // above any legitimate find so it can only fire on a genuine hang.
 export const SEARCH_WATCHDOG_SLACK_MS = 6_000
+
+// HOW LONG A SENTENCE THE USER IS READING KEEPS THE SCREEN (ms). NOT a MOTION
+// value: this is a floor on a UI state's lifetime, not the duration of an
+// animation. Home's headline slot is one line carrying six unrelated messages
+// (scanning, loading, ready, nobody nearby, the skip line, a gate notice), each
+// driven by its own short-lived flag, and those flags flip several times inside
+// one skip — so the slot was rewriting itself two and three times a second and
+// read as churn rather than as an answer (user report 2026-08-03: "every second
+// the text goes from X to Y to X to Z"). A state that does not outlive this is
+// therefore never PAINTED at all: the swap waits out the remainder and then
+// commits whatever is true at that moment, so a value that came and went in
+// between costs nothing and the eye is asked to read one thing at a time.
+export const HEADLINE_MIN_DWELL_MS = 1_200
 
 // The ceiling on holding a profile card back while its photos load (ms). NOT a
 // MOTION value either: a card is painted out of sight and only then allowed to
@@ -423,72 +462,95 @@ export const WARM_CARD_MAX_MS = 10_000
 // real wait is never silent.
 export const PHOTO_WAIT_DELAY_MS = 200
 
-// ── Bottom-sheet lift shadow ───────────────────────────────────────────────
-// Soft upward shadow that floats every BottomSheet off the backdrop. A single
-// native boxShadow (the building-native-ui skill: never hand-stack shadow
-// layers — use boxShadow). Replaces the old 20-View SHADOW_GRADIENT_* stack:
-// same gentle lift, 1 node per popup instead of 20. All sheets share this; for
-// a different lift fork via a prop, not by redefining the string.
-
-export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
-
-// ── The dock's lift ────────────────────────────────────────────────────────
-// The upward shadow home's bottom strip floats on (HomeDock.tsx). It is a
-// SEPARATE and much stronger stop than the sheet's above, on purpose (user
-// directive 2026-07-30): a sheet is a surface of its own colour sliding over the
-// page, so the faintest edge is enough to say it is on top — but the strip's
-// ground IS the page's, so the shadow is the ONLY thing saying it is a
-// foreground at all, and the directive is that it read as HOVERING. Hence the
-// deeper drop and the wider blur: at the sheet's 4/24/0.12 the band simply
-// looked like the bottom of the page.
-//
-// The STOP, though, is barely above the sheet's, and that is a correction rather
-// than a compromise (user directive 2026-07-30): at 0.26 the drop stopped
-// reading as a shadow and painted a visible grey BAND across the page above the
-// strip, which on a purple-and-white app is a colour that does not exist in it.
-// What makes this read as hovering is the distance it falls, not how dark it is.
-//
-// There is no rule along the strip's top and there must never be one — this
-// gradient is what stands in its place.
-//
-// Softened once more on 2026-07-30 (0.13 → 0.10, 20 → 18 blur): with the keys
-// now carrying lifted white chips of their own, the band no longer has to prove
-// on its own that it is a foreground, and the lighter stop keeps the page above
-// it clean. Anything heavier starts painting the grey band described above.
-export const DOCK_SHADOW = '0px -8px 18px 0px rgba(0,0,0,0.10)'
-
-// The lift of a MARK — the little white disc a dock key's count stands on. It
-// is `LIFT_SHADOW`'s idea at a fraction of its strength and with NO offset at
-// all: that one is for a tile the size of a button or a paragraph, and the same
-// drop under a single digit reads as the digit having come loose from the strip.
-// SYMMETRIC (user directive 2026-08-02) because the thing it lifts is a CIRCLE
-// standing beside a glyph, not a card resting on a page: a disc with a shadow
-// pooled under one edge reads as tilted. Stated as a boxShadow string, like the
-// dock's own, since an Android `elevation` can only ever drop downwards.
-export const MARK_SHADOW = '0px 0px 6px 0px rgba(0,0,0,0.14)'
-
 // ── The lift of a surface that came from below ─────────────────────────────
-// The upward shadow on the TOP edge of every full-screen surface that rises
-// over another one: a Circles page pushed over the hub, chat, the profile
-// preview, the invitation, home's match card. It is applied in exactly ONE
-// place — RisingCard, which IS "the surface that rises" — so every page in the
-// app says "I am a layer above the one you were on" identically, and no call
-// site declares a lift of its own.
+// ONE upward shadow for everything in the app that stands over what is beneath
+// it (user directive 2026-08-03): home's dock and the bar under a profile card,
+// every BottomSheet, and every full-screen surface that rises (RisingCard).
+// There were three separate strings for these — 4/24/0.12 for a popup, 8/18/0.10
+// for the dock, 5/16/0.20 for a rising page — and the user read them side by
+// side on the emulator: against the dock, a popup coming up looked FLAT. The
+// difference was never the strength, it was the ratio of the DROP to the BLUR
+// (0.44 for the dock against 0.17 for the popup): a shadow displaced far inside
+// a tight blur sits above the edge at nearly its full stop before it falls off,
+// which is a band the eye reads as depth, while one barely displaced inside a
+// wide blur is a halo hugging the edge and reads as a line. The dock's ratio is
+// the one that reads, so it is now the app's only one.
 //
-// The edge is only ever ON SCREEN while the surface is arriving, or while a
-// finger is dragging it back down: at rest each of these covers the whole
-// screen and its top edge is off it. That is precisely what this is for (user
-// directive 2026-07-31) — the entrance was unreadable, worst of all in
-// Circles, where a page and the page under it are the same PAGE tint and
-// nothing at all marked the seam.
+// The STOP stays low, and that is a correction rather than a compromise (user
+// directive 2026-07-30): at 0.26 the drop stopped reading as a shadow and
+// painted a visible grey BAND across the page above the strip, which on a
+// purple-and-white app is a colour that does not exist in it. What makes this
+// read as hovering is the distance it falls, not how dark it is.
 //
-// A SEPARATE and stronger stop than SHEET_SHADOW above, for the same reason
-// DOCK_SHADOW is: a popup floats on a dimmed backdrop, which already does half
-// the work of saying it is on top, and these surfaces have no scrim under them
-// at all. The drop stays SHORT and the blur tight on purpose — what has to read
-// is an EDGE, not a band; see DOCK_SHADOW for what a wide dark spread does to a
-// purple-and-white page.
-export const RISE_SHADOW = '0px -5px 16px 0px rgba(0,0,0,0.20)'
+// A single native boxShadow (the building-native-ui skill: never hand-stack
+// shadow layers) and never an Android `elevation`, which can only drop
+// downwards. There is no rule along the top edge of any of these surfaces and
+// there must never be one — this is what stands in its place.
+export const RISE_SHADOW = '0px -8px 18px 0px rgba(0,0,0,0.10)'
+
+// ── The screen's own two edges ─────────────────────────────────────────────
+// The same lift MIRRORED, cast INWARDS out of the top and the bottom edge of
+// the SCREEN — the app's one global shade, applied in exactly two places
+// (`ScreenEdgeShade.tsx`, hung off the root layout) and never by a page (user
+// directive 2026-08-03). The top edge was a purple 0.5 → 0 linear gradient
+// painted as an SVG rect and the bottom edge had nothing at all except on the
+// one screen that happens to carry the dock, so a Circles page or the sign-in
+// page simply ran off the bottom of the display. Now every screen in the app is
+// bounded by the same black at the same rate, whatever is drawn inside it.
+//
+// Same drop, same blur and — since the user read it on the emulator at 0.20 and
+// asked for half (2026-08-03) — the same STOP as RISE_SHADOW, so a seam inside
+// the app and the edge of the screen are one treatment in every respect. The
+// purple band this replaced was at 0.5 of INK, and the point of the exercise is
+// that the top of the screen stops being the loudest thing on it.
+// The shade is PAINTED as a band that falls from this stop to nothing
+// (`ScreenEdgeShade.tsx`) rather than cast as a shadow: neither shadow build
+// survives both platforms — an outset shadow off a box past the edge is clipped
+// away by Android's view group, and the inset `boxShadow` that replaced it drew
+// nothing at all on an iPhone (user report 2026-08-03). The look is unchanged by
+// that: the same black at the same stop, over the same reach.
+// HOW STRONG THE EDGE IS, and it is NOT the lift's stop (user, 2026-08-03). It
+// was halved to 0.10 to match RISE_SHADOW after being read on the EMULATOR, and
+// on a real phone — both platforms — the edge could not be seen at all. A shadow
+// cast under a card is read against the white beside it; this one has nothing to
+// be compared against, so it needs its own strength.
+export const EDGE_SHADE_ALPHA = 0.2
+
+// How far a shade reaches in from its edge, i.e. the distance over which it has
+// fallen to nothing. It is the HEIGHT of the band. Stated rather than borrowed
+// from the safe-area inset, because the fall is the design's and is identical on
+// every device — with the ONE exception the top edge states for itself: a shade
+// that carries the OS glyphs is as deep as the strip they stand in, since an
+// Android strip is ~24-30dp against a notched iPhone's 47-59.
+export const EDGE_SHADE_REACH = 26
+
+// (`MARK_SHADOW`, the dock count disc's own lift, is DELETED — user directive
+// 2026-08-03: every mark and every tile in the app now casts the ONE shadow
+// below, and a mark with a stop of its own was a second answer to the same
+// question.)
+
+// The lift of a CARD LYING ON THE PAGE — the white box a list of rows is drawn
+// on (the Circles hub, a roster, the search results). It is not a surface that
+// came from below and it is not a mark: it is a sheet of white resting on the
+// page tint, so the shade is SYMMETRIC (user directive 2026-08-03) — no drop,
+// no direction, the same fall on all four sides, which is what says "laid on
+// the surface" rather than "hovering over it". RISE_SHADOW's displaced band
+// would say the card had come from somewhere, and the page under it is the
+// thing it is resting on. Small: what has to read is the card's own edge
+// against a tint only a shade away from its white, not depth. A single native
+// boxShadow, never an Android `elevation`, which can only drop downwards.
+export const CARD_SHADOW = '0px 0px 8px 0px rgba(0,0,0,0.08)'
+
+// The same lift at DOUBLE the stop, for the one thing that floats free rather
+// than lying on something: a round chrome button standing off a photograph
+// (user directive 2026-08-03). Same offset, same blur — it is the same shadow,
+// not a second treatment — but a white disc on a photo has no card edge to be
+// read against, so at the card's stop it read as flat. Nothing else takes this.
+export const CARD_SHADOW_STRONG = '0px 0px 8px 0px rgba(0,0,0,0.16)'
+
+// (There is no shadow for chat's drag handle: the bar is the popup's bar
+// exactly, and what holds it legible is the band of page ground it stands on —
+// see `SheetHeader`, user directive 2026-08-03.)
 
 // The air a popup leaves above itself once it has grown as tall as it is
 // allowed to. A sheet rises from the bottom, so an over-long body used to push
@@ -559,29 +621,15 @@ export const SKELETON = {
   metaOfTitle: 0.6,
 } as const
 
-// ── Sync hairline ──────────────────────────────────────────────────────────
-// Geometry of the quietest loading mark in the app (SyncBar in OverlaySheet.tsx):
-// a segment that drifts along a page's chrome edge while a round trip runs
-// BEHIND content that is already painted. The skeleton above says "there is
-// nothing here yet"; this says "what you are reading is not the final word".
-// Deliberately thin and short — it may never read as a progress bar, only as a
-// sign that something is still thinking. Its rhythm is not here: the drift runs
-// on PULSE.phaseMs, the app's one attention period, so a page whose list is
-// still breathing on the skeleton and one that is re-syncing move on the same
-// clock instead of on two.
-
-export const SYNC = {
-  height: 2,
-  /** How much of the edge the drifting segment covers. */
-  segment: 0.3,
-} as const
-
 // ── Misc UI dimensions ─────────────────────────────────────────────────────
 
+// The radius is always half the height: the bar's ends are semicircles, so it
+// reads as one drawn stroke rather than as a rounded rectangle, at whatever
+// thickness it is set to.
 export const DRAG_HANDLE = {
   width: 48,
-  height: 4,
-  radius: 2,
+  height: 6,
+  radius: 3,
 } as const
 
 // ── Overlay sheets ─────────────────────────────────────────────────────────

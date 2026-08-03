@@ -2,15 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { I18nManager, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import Animated, {
   LayoutAnimationConfig,
-  SlideInDown,
   SlideOutDown,
   SlideInLeft,
   SlideOutLeft,
   SlideInRight,
   SlideOutRight,
   runOnJS,
+  withTiming,
+  type EntryAnimationsValues,
 } from 'react-native-reanimated'
-import { RISE_SHADOW } from '../tokens'
+import { RISE_SHADOW, MOTION } from '../tokens'
 
 /** Which edge the card travels from and back to.
  *  'up'   — from the bottom. Every card-like surface uses this.
@@ -44,6 +45,48 @@ const SIDE = I18nManager.isRTL
 // typing in above the top of the page (Pixel, 2026-07-30). It needs a real
 // device's rise-against-IME timing, which is why it never showed on an
 // emulator.
+// THE RISE STARTS AT THE CARD'S OWN BOTTOM EDGE, NEVER AT THE SCREEN'S (user
+// report 2026-08-03: "does the popup come from the bottom of the screen or from
+// somewhere lower? maybe it takes it time to appear").
+//
+// Reanimated's own `SlideInDown` seeds `originY` at `targetOriginY +
+// windowHeight` — a whole WINDOW below where the card is going, whatever the
+// card's height. For a full-screen surface (chat, Circles, the profile preview)
+// that distance happens to be right and nothing is wrong. For a surface that is
+// NOT full-screen it is the wrong number by exactly the room above it, and the
+// card spends the first part of its 300ms travelling below the screen edge,
+// unseen: home's page1 card and the invitation both stop at the dock's top edge,
+// so ~15% of the window — about 80ms — passed with nothing on the screen, and
+// then the card crossed its whole height in what was left. Read as the surface
+// hesitating and then snapping in.
+//
+// So the entrance is stated here, from `targetHeight`: at `targetOriginY +
+// targetHeight` the card is exactly off its own bottom edge, which is what
+// "rises from below" means, and the visible motion is the same on every host
+// whatever room stands above it. `BottomSheet` carries the identical rule for
+// the popups (it seeds from its measured card height), and this is the same
+// correction for the pages.
+//
+// It is a custom animation rather than `SlideInDown.withInitialValues(...)`
+// because that one takes a static object, and the height is only known inside
+// the worklet the layout engine calls with the measured target. Everything else
+// is left exactly as the preset had it — `withTiming` with NO config, i.e. the
+// framework's own 300ms / inOut(quad) — so this changes the distance and
+// nothing about the timing or the feel. The landing callback comes back through
+// the returned object, since a plain animation function has no `.withCallback`.
+const riseFromBelow = (land: () => void) =>
+  (values: EntryAnimationsValues) => {
+    'worklet'
+    return {
+      animations: { originY: withTiming(values.targetOriginY, { duration: MOTION.rise }) },
+      initialValues: { originY: values.targetOriginY + values.targetHeight },
+      callback: () => {
+        'worklet'
+        runOnJS(land)()
+      },
+    }
+  }
+
 const RiseArrival = createContext(true)
 
 /** True once the rising surface around this subtree has landed (always true
@@ -94,9 +137,14 @@ export function RisingCard({
    *  never left waiting for an animation that never ran. */
   onArrived?: () => void
 }) {
-  const { entering, exiting } = from === 'side'
-    ? SIDE
-    : { entering: SlideInDown, exiting: SlideOutDown }
+  const side = from === 'side'
+  // The exit is the entrance backwards, so it takes the same duration; the
+  // presets would otherwise keep their own 300ms and a surface would leave
+  // slower than it arrived.
+  const exiting = useMemo(
+    () => (side ? SIDE.exiting : SlideOutDown).duration(MOTION.rise),
+    [side],
+  )
   // The entrance says when it is over: the animation's own completion callback,
   // never a duration copied into a timer (a card that skips its entrance is
   // simply born arrived). `finished` is not consulted — an entrance cut short
@@ -112,12 +160,17 @@ export function RisingCard({
     setArrived(true)
     onArrivedRef.current?.()
   }, [])
+  // The rise states its own distance (riseFromBelow, above) and carries the
+  // landing in the object it returns; the side drawer is still a preset builder,
+  // so there the same landing goes on through `.withCallback`.
   const enter = useMemo(
-    () => entering.withCallback(() => {
-      'worklet'
-      runOnJS(land)()
-    }),
-    [entering, land],
+    () => side
+      ? SIDE.entering.duration(MOTION.rise).withCallback(() => {
+          'worklet'
+          runOnJS(land)()
+        })
+      : riseFromBelow(land),
+    [side, land],
   )
   // No entrance to wait for: the card is already where it is going, so it has
   // already arrived.

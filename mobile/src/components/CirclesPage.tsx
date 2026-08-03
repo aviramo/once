@@ -13,14 +13,15 @@
 // Server: everything speaks to the phase-1 endpoints via src/lib/circles.
 // Circles reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Keyboard, Linking, FlatList, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Keyboard, FlatList, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 import { Path, Circle, Line } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../hooks/useBottomInset'
+import { KeyboardSurface } from '../hooks/useKeyboard'
 import { Text, TextInput } from './AppText'
 import { SheetHeader, type OverlaySheetBody } from './OverlaySheet'
-import { PullContext, PullScrollView, PullPane, usePullBehavior, type PullCtx } from './PullPane'
+import { PullContext, PullScrollView, PullPane, usePullBehavior, type PullCtx, type ScrollReach } from './PullPane'
 import Animated, { useSharedValue, useAnimatedStyle, useAnimatedReaction, withTiming, runOnJS, type SharedValue } from 'react-native-reanimated'
 import type { GestureType } from 'react-native-gesture-handler'
 import { RisingCard } from './RisingCard'
@@ -28,7 +29,7 @@ import { Button } from './Button'
 import { RoundButton } from './RoundButton'
 import { Spinner } from './Spinner'
 import { ConfirmDialog } from './ConfirmDialog'
-import { BottomSheet, SheetScroll, SheetActionPair, SHEET_DESC } from './BottomSheet'
+import { BottomSheet, SheetScroll, SheetActionPair } from './BottomSheet'
 import { Glyph, GroupsIcon, TrashIcon, RankIcon, KeyIcon, UserMinusIcon, SignOutIcon, CheckIcon, DoubleCheckIcon, CloseIcon, SearchIcon, CreditIcon, GlobeIcon } from './icons'
 import { GlyphSlot } from './GlyphSlot'
 import { ToggleRow } from './Switch'
@@ -37,19 +38,18 @@ import { t, genderize } from '../i18n'
 import { useUserStore, type Profile } from '../stores/userStore'
 
 type StoreProfile = ReturnType<typeof useUserStore.getState>['profile']
-import { Avatar, AvatarDisc, GroupHead, SkeletonRows, SyncBar } from './CircleBits'
+import { Avatar, AvatarDisc, GroupHead, NOTE_TEXT, ShareGlyph, SkeletonRows } from './CircleBits'
 import { Chip } from './Chip'
 import { Strip, STRIP_GUTTER } from './Strip'
 import { MatchCard, ProfileActionBar, profileActionBarShows } from './MatchCard'
 import { type StripOption } from './OptionStrip'
 import { CirclesArt } from './CirclesArt'
 import { ArrowDownArt } from './ArtKit'
-// Cyclic with this module by design (SharedListPopup opens the group popup that
-// lives here): both sides touch the other only at render time, and every export
-// involved is a hoisted function declaration, so neither can see a half-built
-// module. Keeping the popup out of here instead would fork the app's one
-// "everything we share" surface into two.
 import { SharedCirclesPopup, useSharedCircles } from './SharedListPopup'
+// The group popup lives in a module of its own so that this file and
+// SharedListPopup can both raise it without importing each other (Metro warned
+// on the cycle at every launch). Forking it would give the app two group popups.
+import { GroupSheet, GroupStatus, openGroupLink } from './GroupSheet'
 import type { MetaPart } from '../lib/meta'
 import { rosters, joinRequests, friendsRoster, dropGroupCaches } from '../lib/rosterCache'
 import { shareFriendInvite } from '../lib/referral'
@@ -70,7 +70,7 @@ import {
   type FriendItem, type CirclesSummary, type JoinedGroup, type PendingGroup,
   type JoinRequestItem, type CirclesTarget,
 } from '../lib/circles'
-import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, STROKE, ROUND_BUTTON_SIZE_SM, SHEET_GAP, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS, DISABLED_OPACITY } from '../tokens'
+import { XS, SM, MD, LG, XL, RADIUS, TEXT, WEIGHT, ICON, ROUND_BUTTON_SIZE_SM, SHEET_GAP, lh, bottomGap, LIST_PAGE_AHEAD_VIEWPORTS, SEARCH_DEBOUNCE_MS, DISABLED_OPACITY, CARD_SHADOW } from '../tokens'
 import { PAGE, SURFACE, INK, INK_MUTED, INK_SUBTLE, INK_WASH, WHITE, INK_DIM, NEGATIVE } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { fuzzyRank } from '../lib/fuzzy'
@@ -78,18 +78,6 @@ import { fuzzyRank } from '../lib/fuzzy'
 const PlusGlyph = ({ color = INK, size = ICON.md }: { color?: string; size?: number }) => (
   <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2} strokeLinecap="round">
     <Line x1="12" y1="5" x2="12" y2="19" /><Line x1="5" y1="12" x2="19" y2="12" />
-  </Glyph>
-)
-// Dedicated "share" mark (tray + upward arrow) for the share-invite buttons.
-// IT TAKES A SIZE like every other glyph in the app: it used to pin its own
-// ICON.md, so the `Button` that injects a size into its icon (the one place that
-// decides how big a button's mark is) was silently ignored, and a stacked button
-// standing beside a 24dp option carried an 18dp mark (user report 2026-07-31).
-// The pen is the app's own too — it was drawn at a 1.9 of its own, a hair off the
-// STROKE.base every other line-art mark at this size uses.
-const ShareGlyph = ({ color = WHITE, size = ICON.md }: { color?: string; size?: number }) => (
-  <Glyph width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={STROKE.base} strokeLinecap="round" strokeLinejoin="round">
-    <Path d="M12 3v12" /><Path d="M8 7l4-4 4 4" /><Path d="M5 12v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
   </Glyph>
 )
 // Settings gear (rides the manage page's header, at the end of the row opposite
@@ -129,7 +117,7 @@ type PersonTarget =
   | { kind: 'member'; group: OwnedGroup; member: GroupMember }
   | { kind: 'friend'; friend: FriendItem }
 
-type CView =
+type CView = (
   | { k: 'hub' }
   | { k: 'friends' }
   | { k: 'find' }
@@ -138,7 +126,11 @@ type CView =
   // is a drawer inside this page's own roster now (user directive 2026-07-31),
   // not a page of its own, so a notification that used to land ON the queue
   // lands on the group with the queue already unfolded.
-  | { k: 'owned'; group: OwnedGroup; openRequests?: boolean }
+  // `preview` seeds the circle's own popup OPEN, which is how a JUST-CREATED
+  // circle lands: the form said what to call it and who may get in, and none of
+  // that is what the circle IS — so the last step of creating one is meeting it
+  // the way everybody else will, on the same popup its own foot opens.
+  | { k: 'owned'; group: OwnedGroup; openRequests?: boolean; preview?: boolean }
   | { k: 'settings'; group: OwnedGroup }
   // One requester's profile, opened from the queue. Approving is a decision
   // about a PERSON, so it is made on the same profile card the app shows for a
@@ -156,6 +148,21 @@ type CView =
   // owner's does (see MemberProfileView). Editing my profile is what the dock's
   // profile key is for, and a list of who is in a group is not the way to it.
   | { k: 'person'; person: PersonTarget }
+) & {
+  /** WHICH PUSH THIS IS. A stamp taken when the page is pushed, and the only
+   *  thing in the layer's React key that a second visit changes.
+   *
+   *  A key of index-plus-kind (what stood here) says two different managed
+   *  circles are the same element, so React UPDATES the layer instead of
+   *  replacing it — and a page that inherits the previous page's `usePullBehavior`
+   *  inherits its `pullY`, which a ride-off left parked a whole screen down. The
+   *  page was in the stack (its push logged, its state right) and nowhere on the
+   *  screen. It needs the pop and the push to land in ONE render to happen, which
+   *  is exactly what choosing a circle while the last one is still falling does
+   *  now that the falling page no longer swallows the tap — so it appeared the
+   *  day the pane learned to let touches through, having been latent under it. */
+  n?: number
+}
 
 const titleFor = (v: CView): string => {
   switch (v.k) {
@@ -190,7 +197,7 @@ type HubGroupTarget = { group: GroupBrief; status: GroupStatus }
 
 export function CirclesPage({
   onClose, onRegisterBack, target, onTargetConsumed,
-  dismissGestureRef, onScrollAtTop, headerBottomShared, pullEngaged,
+  dismissGestureRef, reach: sheetReach, armed: sheetArmed, headerBottomShared, pullEngaged,
 }: OverlaySheetBody & {
   onClose: () => void
   onRegisterBack: (fn: () => boolean) => void
@@ -229,10 +236,23 @@ export function CirclesPage({
   // cost two Backs to get out of. The guard lives inside the state updater, not
   // in a timer or on the rows, so it also catches both taps landing in one
   // React batch: the second updater sees what the first one produced.
+  const pushSeq = useRef(0)
   const push = useCallback((v: CView) => setStack(sk => (
-    viewKey(sk[sk.length - 1]) === viewKey(v) ? sk : [...sk, v]
+    viewKey(sk[sk.length - 1]) === viewKey(v) ? sk : [...sk, { ...v, n: ++pushSeq.current }]
   )), [])
-  const pop = useCallback(() => setStack(sk => (sk.length > 1 ? sk.slice(0, -1) : sk)), [])
+  // A PAGE CLOSES ITSELF, NOT "THE TOP ONE". The two are the same page only
+  // while nothing else has been opened in the meantime — and something can be:
+  // the pop is fired by the ride-off LANDING, and the tap that opens the next
+  // circle lands during the fall. Popping the last entry then removed the page
+  // the user had just chosen and left the one he had thrown away. The stamp is
+  // what identifies it (see CView.n); a stack seeded whole by a notification
+  // target carries none, and for those the last entry IS the only answer.
+  const pop = useCallback((v?: CView) => setStack(sk => {
+    if (sk.length <= 1) return sk
+    if (v?.n == null) return sk.slice(0, -1)
+    const i = sk.findIndex(x => x.n === v.n)
+    return i > 0 ? [...sk.slice(0, i), ...sk.slice(i + 1)] : sk
+  }), [])
 
   // A deep-linked group the caller is only a MEMBER of opens the hub's group
   // popup rather than a stack view (that is the whole surface a member gets), so
@@ -347,38 +367,30 @@ export function CirclesPage({
   // the whole Circles sheet away. Only the hub, the bottom layer, closes the
   // sheet when it is swiped, and that is the sheet's own pull.
   const deep = stack.length > 1
-  // The sheet's pan must go quiet while a page rides above it, or the two
-  // arbitrate for the same drag. Two gates feed it and both are ours to set:
-  // the at-top flag (body drags) and the header band (a drag started there
-  // bypasses that flag). `layer0AtTop` remembers what the hub's own scroll last
-  // reported, so popping back restores the truth rather than guessing.
-  const layer0AtTop = useRef(true)
+  // THE PAGE ON TOP OWNS THE DRAG. While one stands over the hub, the sheet's
+  // own pull is suspended outright — not talked out of it by feeding it a false
+  // at-top flag and a zeroed header band, which is what stood here: two gates,
+  // both of which had to be set and unset in step, and both of which had to be
+  // restored to the hub's real state on the way back (`layer0AtTop`, gone with
+  // them). Two live pans on one finger is a coin toss, and it read as a swipe
+  // that sometimes did nothing.
   const layer0HeaderBottom = useRef(0)
-  const deepRef = useRef(deep)
-  deepRef.current = deep
-  const setLayer0AtTop = useCallback((v: boolean) => {
-    layer0AtTop.current = v
-    if (!deepRef.current) onScrollAtTop(v)
-  }, [onScrollAtTop])
-  useEffect(() => {
-    onScrollAtTop(deep ? false : layer0AtTop.current)
-    headerBottomShared.value = deep ? 0 : layer0HeaderBottom.current
-  }, [deep, onScrollAtTop, headerBottomShared])
+  useEffect(() => { sheetArmed.value = !deep }, [deep, sheetArmed])
 
   return (
     <View style={s.root}>
       {stack.map((v, i) => (
         <PageLayer
-          key={`${i}:${v.k}`}
+          key={`${i}:${viewKey(v)}:${v.n ?? 0}`}
           view={v}
           isTop={i === stack.length - 1}
           // The hub rides the SHEET's pull (its swipe closes Circles); every
           // page above it owns a pull of its own that pops one level.
           sheetPanRef={i === 0 ? dismissGestureRef : undefined}
           sheetPullEngaged={i === 0 ? pullEngaged : undefined}
-          onSheetScrollAtTop={i === 0 ? setLayer0AtTop : undefined}
-          onHeaderMeasured={i === 0 ? (h => { layer0HeaderBottom.current = h; if (!deepRef.current) headerBottomShared.value = h }) : undefined}
-          onBack={i === 0 ? onClose : pop}
+          sheetReach={i === 0 ? sheetReach : undefined}
+          onHeaderMeasured={i === 0 ? (h => { layer0HeaderBottom.current = h; headerBottomShared.value = h }) : undefined}
+          onBack={i === 0 ? onClose : () => pop(v)}
           registerClose={registerClose}
           insets={insets}
           rosterGap={rosterGap}
@@ -401,7 +413,7 @@ export function CirclesPage({
 // every layer above owns a pull whose commit POPS one page, which is what makes
 // a swipe do exactly what Back does (user directive 2026-07-27).
 function PageLayer({
-  view, isTop, sheetPanRef, sheetPullEngaged, onSheetScrollAtTop, onHeaderMeasured, onBack, registerClose,
+  view, isTop, sheetPanRef, sheetPullEngaged, sheetReach, onHeaderMeasured, onBack, registerClose,
   insets, rosterGap, profile, push, setStack, applyGroup, removeGroupViews,
   groupTarget, onGroupTargetConsumed,
 }: {
@@ -409,8 +421,10 @@ function PageLayer({
   isTop: boolean
   /** Present only on the bottom layer: the sheet's own dismiss pan. */
   sheetPanRef?: React.MutableRefObject<GestureType | undefined>
+  /** The sheet's own scroll reach — the bottom layer reports into it, since the
+   *  bottom layer's swipe IS the sheet's. */
+  sheetReach?: ScrollReach
   sheetPullEngaged?: SharedValue<boolean>
-  onSheetScrollAtTop?: (atTop: boolean) => void
   onHeaderMeasured?: (bottom: number) => void
   onBack: () => void
   /** Hands the top layer's animated close up to the shell, so the hardware
@@ -459,23 +473,30 @@ function PageLayer({
   // Called unconditionally (rules of hooks); the bottom layer leaves it disabled
   // and uses the sheet's pull instead.
   //
-  // A LIST page takes the 'sheet' arbitration: a manualActivation pan that
-  // hands the drag to the inner scroll first and picks it up mid-gesture where
-  // the list runs out. A PROFILE page must NOT — its body is a full-bleed
-  // MatchCard that owns its own PullContext, and over that card the sheet pan
-  // consumes the raw touch stream and swallows the taps on the card's own
-  // controls. That is exactly the bug the menu's own profile sheet was fixed for
-  // (home.tsx: activation="scrollPan"), and these pages are the same surface,
-  // so they get the same answer: 'scrollPan', whose gesture declares its
-  // interest up front (activeOffsetY / failOffsetX) and leaves every tap alone.
-  // It ignores `headerBottom`, which is right: a page with no bar has no drag
-  // band (see above), so the value stays 0 on these pages either way.
+  // ONE ARBITRATION FOR EVERY PAGE IN THE APP, AND IT IS THE 'sheet' ONE (user
+  // directive 2026-08-03: "a circle page comes down really well — use its
+  // mechanism in the profile page, the circles pages, a member's page and
+  // chat"). A LIST page has always taken it — a manualActivation pan that hands
+  // the drag to the inner scroll first and picks it up MID-GESTURE where the
+  // list runs out, re-origined to where the finger is (`pullBase`) so the page
+  // opens from the finger rather than jumping — and that is exactly what the
+  // full-bleed pages were missing: 'scrollPan' zeroes `pullY` for as long as the
+  // body has anything left to scroll, so a drag on a card whose reel was not at
+  // its top did nothing at all and then had to be started again.
+  //
+  // A profile page took the old auto-activating pan because a sheet pan once consumed the raw
+  // touch stream and swallowed the taps on the card's own controls. It cannot
+  // now: manualActivation only ever activates on a dy-dominant move past the 8px
+  // slop, so a TAP is never claimed — nothing is arbitrated until the finger has
+  // travelled. `headerBottom` stays 0 on these pages (they draw no bar), which
+  // is right: the card under where one would be reports at-top and hands the
+  // pull over by itself.
   const pull = usePullBehavior({
-    activation: fullBleed ? 'scrollPan' : 'sheet',
+
     enabled: isTop && !isSheetLayer,
     onCommit: useCallback(() => { closing.value = true }, [closing]),
     headerBottom,
-  })
+  } as any)
   const pullY = pull.pullY
   const screenSpan = pull.screenSpan
   // THE PAGE IS GONE WHEN BOTH FACTS ARE TRUE, AND THE LAST OF THE TWO TO ARRIVE
@@ -487,25 +508,33 @@ function PageLayer({
   // page stays mounted, parked off-screen and invisible, but still the TOP layer:
   // the page under it has `enabled: isTop` false, so its swipe is dead, its
   // `commit()` early-returns, and hardware back (which routes to the top layer's
-  // closePage) hits a `slidOut` that is already true. The whole Circles stack
+  // closePage) hits a page that already reads as leaving. The whole Circles stack
   // goes unresponsive with nothing on screen to say why. Reproduced on the
   // emulator, 2026-07-31, by popping a member's page and then trying to leave the
   // group page under it.
+  // Held in a ref, so the reaction below is registered ONCE. A page identifies
+  // ITSELF to the pop now (see the stack's `pop`), which makes `onBack` a fresh
+  // closure on every render of the host — and a reaction that re-registers
+  // mid-ride re-reads its own `previous` as empty, i.e. can fire the landing a
+  // second time.
+  const onBackRef = useRef(onBack)
+  onBackRef.current = onBack
+  const announceGone = useCallback(() => { onBackRef.current() }, [])
   useAnimatedReaction(
     () => closing.value && pullY.value >= screenSpan,
     (gone, was) => {
-      if (gone && !was) { closing.value = false; runOnJS(onBack)() }
+      if (gone && !was) { closing.value = false; runOnJS(announceGone)() }
     },
-    [screenSpan, onBack],
+    [screenSpan, announceGone],
   )
   // How a page leaves when the finger is not the one taking it off: it rides
   // off exactly as a finger would. The bottom layer has no page under it, so it
   // closes the sheet outright instead.
   const commitPull = pull.commit
   const closePage = useCallback(() => {
-    if (isSheetLayer) onBack()
+    if (isSheetLayer) onBackRef.current()
     else commitPull()
-  }, [isSheetLayer, onBack, commitPull])
+  }, [isSheetLayer, commitPull])
   // Every member is stable (a ref, a callback, a shared value), so this value is
   // built once and never changes identity — a drag on this page re-renders
   // nothing below it. See PullCtx.pullEngaged.
@@ -516,10 +545,9 @@ function PageLayer({
   // rather than a second copy of it.
   const pullCtx = useMemo<PullCtx>(() => (
     isSheetLayer
-      ? { panRef: sheetPanRef!, extraRefs: [], setScrollAtTop: onSheetScrollAtTop ?? (() => {}), pullEngaged: sheetPullEngaged! }
+      ? { panRef: sheetPanRef!, extraRefs: [], reach: sheetReach ?? pull.reach, pullEngaged: sheetPullEngaged! }
       : pull.pullCtx
-        ?? { panRef: pull.panRef, extraRefs: [], setScrollAtTop: pull.setScrollAtTop, pullEngaged: pull.pullEngaged, pullY: pull.pullY }
-  ), [isSheetLayer, sheetPanRef, onSheetScrollAtTop, sheetPullEngaged, pull.pullCtx, pull.panRef, pull.setScrollAtTop, pull.pullEngaged, pull.pullY])
+  ), [isSheetLayer, sheetPanRef, sheetReach, sheetPullEngaged, pull.pullCtx, pull.reach])
 
   // Scrolling the focused field clear of the keyboard used to live here, as this
   // page's own `keyboardDidShow` listener. It is `PullScrollView`'s job now, for
@@ -542,6 +570,12 @@ function PageLayer({
   // The mode is per PAGE LAYER, which is what this component is: a group's
   // roster and my friends each hold their own, so an open field can never be
   // carried from one page to another.
+  // The page's body says when it is waiting on the server and this bar is what
+  // says it, by breathing the page's own name (see useSyncFlag / SheetHeader's
+  // `titleBusy`). Stable identity, so publishing it re-renders nothing below.
+  const [titleBusy, setTitleBusy] = useState(false)
+  const reportSync = useCallback((busy: boolean) => setTitleBusy(busy), [])
+
   const [findQuery, setFindQuery] = useState('')
   const [rosterSearch, setRosterSearch] = useState(false)
   const [rosterQuery, setRosterQuery] = useState('')
@@ -579,6 +613,7 @@ function PageLayer({
   const header = fullBleed ? null : (
     <SheetHeader
       title={searchField ? undefined : titleFor(view)}
+      titleBusy={titleBusy}
       center={searchField}
       // THE PAGE SAYS ITS OWN NAME FIRST (user directive 2026-07-31): the title
       // leads the row from the edge reading begins at, exactly as the match
@@ -736,7 +771,7 @@ function PageLayer({
     // the one scroll region in it.
     <View style={[s.scroll, s.content]}>
       {view.k === 'find' ? (
-        <FindView query={findQuery} bottomInset={rosterGap} onDone={closePage} />
+        <FindView query={findQuery} bottomInset={rosterGap} />
       ) : view.k === 'friends' ? (
         <FriendsView
           profile={profile}
@@ -759,6 +794,7 @@ function PageLayer({
         <OwnedGroupView
           group={view.group}
           initialRequestsOpen={!!view.openRequests}
+          initialPreviewOpen={!!view.preview}
           // null while the field is shut, so the page can tell "searching for
           // nothing yet" from "not searching" — see OwnedGroupView's `search`.
           search={rosterSearch ? rosterQuery : null}
@@ -781,7 +817,7 @@ function PageLayer({
       scrollEventThrottle={16}
       onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => { scrollY.current = e.nativeEvent.contentOffset.y }}
     >
-      {view.k === 'create' && <CreateView onCreated={g => setStack([{ k: 'hub' }, { k: 'owned', group: g }])} />}
+      {view.k === 'create' && <CreateView onCreated={g => setStack([{ k: 'hub' }, { k: 'owned', group: g, preview: true }])} />}
       {view.k === 'settings' && <GroupSettingsView group={view.group} onChanged={applyGroup} onDeleted={() => removeGroupViews(view.group.id)} />}
     </PullScrollView>
   )
@@ -802,6 +838,12 @@ function PageLayer({
   // TWF clones the handlers onto the root View it already has and holds no
   // state, so a dismissing tap costs one Keyboard call and no render.
   const page = (
+    // Every one of these pages has a field somewhere (the hub's search, a
+    // group's name / link / description), so the PAGE is what ends at the top of
+    // the keyboard — the app's root shrinks nothing any more (user directive
+    // 2026-08-03). Stated at the root of the page for the same reason the
+    // dismissing tap below is: the answer is the same on all of them.
+    <KeyboardSurface>
     <PullContext.Provider value={pullCtx}>
       <TouchableWithoutFeedback accessible={false} onPress={Keyboard.dismiss}>
         {/* `header` is null on a full-bleed page, so this is the body alone
@@ -810,10 +852,11 @@ function PageLayer({
             photo. Nothing floats over anything now. */}
         <View style={s.root}>
           {header}
-          {body}
+          <SyncReport.Provider value={reportSync}>{body}</SyncReport.Provider>
         </View>
       </TouchableWithoutFeedback>
     </PullContext.Provider>
+    </KeyboardSurface>
   )
 
   if (isSheetLayer) return page
@@ -821,6 +864,7 @@ function PageLayer({
     <PullPane
       gesture={pull.gesture}
       pullY={pull.pullY}
+      leaving={pull.leaving}
       style={StyleSheet.absoluteFill}
     >
       {/* Rises on push; NO exit animation — a page popped by a swipe has
@@ -932,7 +976,18 @@ function HubView({ push, bottomInset, initialGroup, onInitialGroupConsumed }: {
   // a place I belong; the rest keep the order the summary gave them.
   const waitingFirst = (a: OwnedGroup, b: OwnedGroup) =>
     Number((b.pending ?? 0) > 0) - Number((a.pending ?? 0) > 0)
-  const items: HubItem[] | null = loading ? null : [
+  //
+  // A CIRCLE I JUST WALKED OUT OF IS OFF THIS LIST AT ONCE (2026-08-03). The row
+  // is drawn from `relations.communities`, which is REALTIME-owned — `invoke`
+  // strips relations from every plain response (applyServerUser) — so between
+  // the leave landing and the socket echo arriving the hub went on listing a
+  // circle I am not in, and a late or dropped event left it standing there for
+  // good. The popup says which group it finished with (`onDone`) and the row
+  // goes then and there; when the summary catches up it no longer carries the
+  // group and the filter is a no-op, so the two can never disagree. It also
+  // covers the degraded `fallback` path, which nothing repaints at all.
+  const [gone, setGone] = useState<string[]>([])
+  const items: HubItem[] | null = loading ? null : ([
     ...[...data!.managed].sort(waitingFirst).map((group): HubItem => ({ k: 'managed', group })),
     // A pending join request carries a "waiting for approval" meta; tapping
     // opens the group's own popup, the same one a membership opens, with the
@@ -942,7 +997,7 @@ function HubView({ push, bottomInset, initialGroup, onInitialGroupConsumed }: {
     ...data!.pending.map((group): HubItem => ({ k: 'pending', group })),
     ...data!.declined.map((group): HubItem => ({ k: 'declined', group })),
     ...data!.joined.map((group): HubItem => ({ k: 'joined', group })),
-  ]
+  ] as HubItem[]).filter(it => !gone.includes(it.group.id))
 
   // My friends is the card's FIRST row, always, so a group row is never first:
   // it keeps its top hairline, and only the last one rounds off.
@@ -1080,7 +1135,15 @@ function HubView({ push, bottomInset, initialGroup, onInitialGroupConsumed }: {
           offers leave / cancel the request / clear the notice accordingly. A
           circle an invite link just landed me on opens this very popup, with
           those same options on it. */}
-      <GroupSheet group={sheet?.group ?? null} status={sheet?.status} onClose={() => setSheet(null)} />
+      <GroupSheet
+        group={sheet?.group ?? null}
+        status={sheet?.status}
+        onClose={() => setSheet(null)}
+        // Leaving, taking a request back and clearing a refusal all end this
+        // group's presence on the page: the row goes with the popup rather than
+        // waiting on the Realtime echo that repaints the summary (see `gone`).
+        onDone={() => { const id = sheet?.group.id; if (id) setGone(g => g.includes(id) ? g : [...g, id]) }}
+      />
     </>
   )
 }
@@ -1153,259 +1216,6 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
 // it was a View wrapped around a <Button> and nothing else. The two ways forward
 // are two ordinary buttons.)
 
-// THE one way out to a group's own page, and there is exactly one place that
-// offers it (user directive 2026-08-02): the "more details" option in the
-// popup's foot. Nothing else in the app opens a circle's link. The server is what
-// guarantees the value is an http(s) URL, so opening it here needs no parsing of
-// its own; a group with no link has no tap anywhere.
-const openGroupLink = (url?: string | null) => {
-  if (!url) return
-  tap()
-  Linking.openURL(url).catch(() => {})
-}
-
-// ── The group popup ────────────────────────────────────────────────────────
-// THE popup a group opens into, from EVERY surface that lists one (user
-// directive 2026-07-28): the hub's rows, a search result, and a match card's
-// shared-groups list all open THIS. A group therefore reads identically
-// wherever it was tapped — the owner's photo, the name, how big it is and
-// "managed by <them>" under it, what it says about itself, its link — and the only thing
-// that changes with where I stand is the ACTION at the bottom, which is always
-// the one thing that standing lets me do:
-//   joined    → share the invite link (public groups only, whose code is not a
-//               secret) + LEAVE the group — the OWNER excepted, who hands the
-//               key over first and never sees it (`iOwnIt`)
-//   pending   → take the join request back
-//   declined  → clear the notice (the answer itself stands; the endpoint only
-//               marks it seen, so this is not a way around the wait)
-//   none      → join, or ask to be let in
-// It is the SAME popup however it was raised (user directive 2026-08-02): a
-// circle an invite link just landed me on offers exactly what the same circle
-// offers when I pick it off the hub myself. Where it came from is not a state,
-// and nothing here may branch on it.
-// Nothing is ever a dead, disabled chip saying what I already am: the search
-// popup used to end at a greyed-out "Member", which named my standing instead
-// of offering what it allows. Every terminal action lands on the same summary
-// refresh (the server trigger repaints relations.communities), so the row that
-// opened the popup goes on its own.
-export type GroupStatus = 'joined' | 'pending' | 'declined' | 'none'
-
-export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin, onDone }: {
-  group: GroupBrief | null
-  status?: GroupStatus
-  onClose: () => void
-  /** The popup has finished sliding away — for a caller that leaves with it. */
-  onClosed?: () => void
-  /** `none` only: joining is the CALLER's (search keeps its own optimistic map
-   *  of what this session has asked for). Without it a non-member sees no
-   *  action, which is right for a list that cannot offer one. */
-  onJoin?: () => void
-  /** A terminal action landed, so the caller's own copy of my standing is
-   *  stale. The hub repaints off the store and ignores it. */
-  onDone?: () => void
-}) {
-  const [confirm, setConfirm] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const pending = status === 'pending'
-
-  // THE OWNER CANNOT WALK OUT OF HIS OWN CIRCLE — HE HANDS THE KEY OVER FIRST
-  // (user directive 2026-08-02). `app_leave_group` deletes the membership row and
-  // nothing more, so an owner leaving would strand the circle with an owner who
-  // is not in it; transferring ownership, or deleting the group, are pages of
-  // their own. It is the very rule the roster's own MemberProfileView keeps for
-  // my card, stated here because the popup is the OTHER place leaving is offered
-  // — and it belongs to the popup rather than to any one host, so no surface that
-  // opens a circle I own can offer it (the roster's foot, the hub, an arrival, a
-  // shared-circles row). A MANAGER is not an owner and leaves like anyone else.
-  // Two ways to know it, and either is enough: the brief may SAY so (a managed
-  // row carries `is_owner` and spreads it straight in), or the owner it draws is
-  // me. The flag alone would leave every other host out; the id alone answers
-  // "no" for the moment before a roster has arrived to say who the owner is, and
-  // this is the one question that may not be wrong in that direction.
-  const meId = useUserStore(st => st.profile?.user_id)
-  const iOwnIt = !!group?.is_owner || (!!meId && group?.owner?.user_id === meId)
-
-  const share = () => {
-    if (!group?.invite_code) return
-    tap()
-    shareInvitation(t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)))
-  }
-  // The one terminal action this popup carries, whichever group it is about and
-  // whatever I am to it: leaving, taking the request back, or clearing the
-  // answer that turned it down.
-  const quit = async () => {
-    if (!group) return
-    setBusy(true); tapWarning()
-    try {
-      // The cached roster goes with the membership — it is other people's names
-      // and photos, kept only for a group the user is actually in. A request,
-      // answered or not, never had one, and both go back through the same
-      // endpoint.
-      if (status === 'joined') { await leaveGroup(group.id); dropGroupCaches(group.id) }
-      else await cancelJoinRequest(group.id)
-      onDone?.()
-      onClose()
-    } finally { setBusy(false); setConfirm(false) }
-  }
-
-  // WHAT MY STANDING LETS ME DO, as marks rather than tiles (user directive
-  // 2026-07-31): the app's one option strip — the very strip home's dock and the
-  // bar under a profile card are — a glyph with one small word under it, the
-  // app's hairline between, and no fill behind any of them. None of these is what
-  // the popup is FOR, so none of them is painted as an invitation to press; the
-  // one action that IS an invitation keeps its purple (see the actions block).
-  //
-  // WHERE THE GROUP SAYS MORE ABOUT ITSELF IS ONE OF THEM, AND IT IS THE ONLY
-  // WAY TO IT (user directive 2026-08-02, evening — reversing that same day's
-  // deletion of it). Leaving the door on the HEAD alone left the popup with no
-  // MARK for it at all: a face and a name that happen to be pressable say
-  // nothing about a link behind them, so a circle that had written down where to
-  // read more looked like a circle that had not. It is an option of the foot
-  // again — a globe over one word — and the head is a plain, dead block of
-  // writing: NOTHING in the app opens a circle's link except this option, and it
-  // is drawn only when the circle HAS one.
-  const quietActions: StripOption[] = [
-    ...(group?.link ? [{
-      key: 'link',
-      label: t('circles.moreDetails'),
-      icon: <GlobeIcon color={INK} size={ICON.xxl} />,
-      onPress: () => openGroupLink(group?.link),
-    } as StripOption] : []),
-    ...(status === 'joined' && !iOwnIt ? [{
-      key: 'leave',
-      label: t('circles.leave'),
-      icon: <SignOutIcon color={INK} size={ICON.xxl} />,
-      onPress: () => setConfirm(true),
-    }]
-    : pending ? [{
-      // No confirm on this one (user directive 2026-07-29): taking back a request
-      // that has not been answered yet destroys nothing, and it can be sent again
-      // at any time. Taking a request back is an X, plainly (2026-07-28).
-      key: 'cancel',
-      label: t('circles.cancelJoin'),
-      icon: <CloseIcon color={INK} size={ICON.xxl} />,
-      busy, disabled: busy,
-      onPress: quit,
-    }]
-    : status === 'declined' ? [{
-      // No confirm here either: it dismisses a notice, it undoes nothing, and the
-      // sentence above it has just said so.
-      key: 'dismiss',
-      label: t('circles.declinedConfirm'),
-      icon: <CloseIcon color={INK} size={ICON.xxl} />,
-      busy, disabled: busy,
-      onPress: quit,
-    }]
-    : [] as StripOption[]),
-  ]
-
-  // THE ONE ACTION THAT INVITES A TAP KEEPS ITS PURPLE (user directive
-  // 2026-07-31, the exception to the strip above): handing the group's link on is
-  // how a circle GROWS, and joining is what a non-member opened this for. Both
-  // are the popup ASKING for something, which is exactly what a filled tile is
-  // for — everything else here is a thing I may do, not a thing I am offered.
-  // Only a MEMBER hands the link on: an invite from someone who has not been let
-  // in yet is not theirs to give.
-  //
-  // It is an ORDINARY button here (user directive 2026-08-02): the full width of
-  // the popup, under the strip rather than beside it, with its mark beside its
-  // label the way every other button in the app carries one. The mark-over-word
-  // shape is for a purple standing IN a row of options, and this one no longer
-  // does — see `stacked` in SheetActionPair.
-  const invitation =
-    status === 'joined' && group?.is_public && group?.invite_code ? (
-      <Button label={t('circles.shareInvite')} variant="primary" size="lg" iconStart={<ShareGlyph color={WHITE} />} onPress={share} />
-    ) : status === 'none' && onJoin ? (
-      <Button
-        label={t(group?.requires_approval ? 'circles.requestJoin' : 'circles.join')}
-        variant="primary"
-        size="lg"
-        onPress={onJoin}
-      />
-    ) : null
-
-  return (
-      <BottomSheet visible={!!group} onDismiss={onClose} onClosed={onClosed}>
-        <View style={s.sheetWrap}>
-          {/* The group's whole introduction is ONE scrolling block (user
-              directive 2026-07-28): the owner's face, "managed by <them>", the
-              name, the size and what the group wrote about itself scroll
-              TOGETHER. Scrolling only the description left the head pinned over
-              a moving strip of text, which read as two unrelated panes; this is
-              one piece of writing and it moves as one.
-              The block takes whatever height is left under the sheet's cap, so
-              it opens showing the head and the first lines, and the link, the
-              standing note and the action below it are ALWAYS on screen. */}
-          <SheetScroll>
-            {/* THE HEAD IS NOT A DOOR (user directive 2026-08-02, evening): the
-                whole introduction — the owner's face, the facts, the name and
-                the paragraph under them — is writing to be read, and NOTHING in
-                it opens the circle's link. The one way there is the foot's
-                "more details" option, which is a mark that says so. The head
-                used to be a Pressable around GroupHead (2026-07-29), which made
-                a link the reader could only find by pressing a name.
-                WHICH GROUP THIS IS, in the app's one block for saying so
-                (GroupHead, CircleBits): a person's page inside a group wears
-                the very same heading (user directive 2026-07-31), which is why
-                it is a component and not three elements written out here. */}
-            <View style={s.sheetHead}>
-              {group ? <GroupHead group={group} /> : null}
-              {group?.description ? <Text style={s.sheetDesc}>{group.description}</Text> : null}
-            </View>
-          </SheetScroll>
-          {/* What this group is to me right now, in a sentence. A group I have
-              not asked to join yet says nothing: the button below says it. It is
-              the last of the popup's reading, standing directly over the foot —
-              it finishes what the group just said about itself, and what comes
-              after it is no longer writing at all but the marks the foot is made
-              of ("more details" left this block on 2026-08-02). */}
-          {status !== 'none' ? (
-            <Text style={s.note}>
-              {t(status === 'joined' ? 'circles.memberNote'
-                : pending ? 'circles.pendingNote'
-                : 'circles.declinedDesc')}
-            </Text>
-          ) : null}
-        </View>
-        {/* The popup's actions, in the app's one action block: what I may do
-            beside what I am being offered (SheetActionPair, which owns the gap,
-            the arrangement and the case where only one of the two exists). They
-            used to be the last children of the body's SM-gap column, which put a
-            group's buttons 8 under its note while every other popup's stood 40
-            clear. THIS POPUP IS ALWAYS `stacked` (user directive 2026-08-02,
-            evening): the options divide the row and the purple runs the full
-            width UNDER them, whether there are two of them or one. So "more
-            details" always stands ABOVE the share line and never beside it, and
-            the invitation is always an ORDINARY button — its mark beside its
-            label, at the label's own size — rather than the mark-over-a-small-
-            word shape a purple takes when it stands IN a row of options. What a
-            circle's foot looks like may not change with how many things I happen
-            to be allowed to do. A group I am nothing to and cannot ask to join
-            has neither side, and gets no block at all. */}
-        <SheetActionPair options={quietActions} action={invitation} stacked />
-      {/* Leaving is the only action here that asks twice: it drops a membership
-          that getting back may not be mine to decide.
-          It stands INSIDE this popup's own window, so the group stays lit under
-          the question and a "no" leaves it exactly where it was (user directive
-          2026-07-30, the same rule as the shared-circles list one level out).
-          This sheet used to switch itself off for it (`!confirm`), which slid the
-          group away and slid it back in for a question the user answered without
-          ever leaving it. Nested is also the only way two popups may overlap at
-          all: as siblings iOS refuses to present the second (see BottomSheet's
-          `onClosed`). */}
-      <ConfirmDialog
-        visible={confirm}
-        title={group ? t('settings.groupsLeaveTitle').replace('{name}', group.name) : ''}
-        confirmLabel={t('settings.groupsLeaveConfirm')}
-        confirmIconStart={<SignOutIcon color={WHITE} />}
-        busy={busy}
-        onCancel={() => setConfirm(false)}
-        onConfirm={quit}
-      />
-    </BottomSheet>
-  )
-}
-
 // ── The strip ──────────────────────────────────────────────────────────────
 // Every list on this surface — the hub's groups, a search result, a group's
 // members, the waiting queue, my friends — is built from the app's ONE row,
@@ -1473,7 +1283,7 @@ function KindChooser({ value, onChange }: { value: GroupKind; onChange: (k: Grou
 // only once the list has reached its top (see PullPane's `scrollSpent`).
 // A FlatList has no wrapper to paint the card on, so the rows carry it: see
 // `rosterRowStyle`.
-function ContainedRoster<T>({ data, keyOf, row, empty, header, footer, bottomInset, onTopMeasured, onEndReached, syncing }: {
+function ContainedRoster<T>({ data, keyOf, row, empty, header, footer, bottomInset, onTopMeasured, onEndReached }: {
   /** null = still loading; `empty` covers both that and a genuinely empty list. */
   data: T[] | null
   keyOf: (item: T) => string
@@ -1494,21 +1304,39 @@ function ContainedRoster<T>({ data, keyOf, row, empty, header, footer, bottomIns
   /** Fetch the next page: the end of the rows is coming into view. A server-paged
    *  list (search) sets it; a list that arrives whole leaves it off. */
   onEndReached?: () => void
-  /** True while the server's answer is still out on a list that is ALREADY
-   *  painted from the last visit — the box wears the drifting hairline on its
-   *  top edge (see SyncBar / useSyncFlag). */
-  syncing?: boolean
 }) {
   const count = data?.length ?? 0
   const boxRef = useRef<View>(null)
+  // What the sync mark runs beside: the ROWS, and never past them. The box is
+  // `flex:1`, so on a page whose foot is an action bar it reaches the bottom of
+  // the screen however few rows are in the card — the lesser of the two is the
+  // list as it is actually seen (short list → its last row; long list → the
+  // bottom edge of what fits).
+  const [rowsHeight, setRowsHeight] = useState(0)
+  const [boxHeight, setBoxHeight] = useState(0)
   return (
     // The box is a wrapper rather than the list's own style so its top edge can
     // be measured in window coordinates; the FlatList just fills it.
     <View
       ref={boxRef}
-      style={[s.rosterBox, { marginBottom: bottomInset }]}
-      onLayout={() => boxRef.current?.measureInWindow((_x, y) => onTopMeasured?.(y))}
+      style={[s.rosterFill, { marginBottom: bottomInset }]}
+      onLayout={e => {
+        setBoxHeight(e.nativeEvent.layout.height)
+        boxRef.current?.measureInWindow((_x, y) => onTopMeasured?.(y))
+      }}
     >
+      {/* THE CARD'S OWN LIFT, AND IT IS AS TALL AS THE ROWS ARE (user directive
+          2026-08-03). The box is `flex:1` — it reaches the bottom of the page
+          however few rows are in it — so a shadow declared on the box outlined a
+          tall empty rectangle standing under the last row. What the eye reads as
+          the card is the run of rows, so the lift is a plate BEHIND them, at
+          the rows' own height, or the box, whichever is the shorter (a long list is a card cut off by the
+          screen, and its shade must not be drawn across the fold). It stands
+          OUTSIDE the clipping box, since a clip takes a child's shadow with it,
+          and carries the card's white so it is also the ground the rows stand
+          on. */}
+      <View style={[s.rosterLift, { height: Math.min(rowsHeight, boxHeight) }]} pointerEvents="none" />
+      <View style={s.rosterBox}>
       <FlatList
         style={s.rosterList}
         data={data ?? []}
@@ -1521,35 +1349,46 @@ function ContainedRoster<T>({ data, keyOf, row, empty, header, footer, bottomIns
         ListHeaderComponent={header ?? null}
         ListEmptyComponent={empty ?? null}
         ListFooterComponent={footer ?? null}
+        onContentSizeChange={(_w, h) => setRowsHeight(h)}
         onEndReached={onEndReached}
         onEndReachedThreshold={LIST_PAGE_AHEAD_VIEWPORTS}
         // A footer means the run of rows does NOT end at the last item, so the
         // card's rounded bottom belongs to the footer, not to that row.
         renderItem={({ item, index }) => row(item, index, index === count - 1 && !footer)}
       />
-      {/* LAST, so it paints over the first row's top edge rather than under it.
-          The box clips (rounded corners), so the hairline ends where the card
-          does. */}
-      {syncing === undefined ? null : <SyncBar visible={syncing} />}
+      </View>
     </View>
   )
 }
 
 // ── The "still thinking" flag ──────────────────────────────────────────────
-// What a cache-first list wears its hairline off (SyncBar). Every list here
-// paints from the last visit and lets the round trip correct it, so between the
-// two there is a stretch where the screen is full and NOT final; this is the
-// only thing that says so. Two rules live in the hook so no page can get them
-// wrong: nothing painted yet = stay away (the skeleton already owns that wait),
-// and a page with two loads in flight (the roster and its waiting queue) is
-// done only when both are.
+// What a cache-first page breathes its own NAME off (SheetHeader's `titleBusy`).
+// Every list here paints from the last visit and lets the round trip correct it,
+// so between the two there is a stretch where the screen is full and NOT final;
+// this is the only thing that says so. Two rules live in the hook so no page can
+// get them wrong: nothing painted yet = stay away (the skeleton already owns
+// that wait), and a page with two loads in flight (the roster and its waiting
+// queue) is done only when both are.
+//
+// The BODY is what knows it and the page's BAR is what says it, so the flag
+// travels up through this context. A page layer publishes the setter around its
+// own body, which is what keeps a stacked page's title from breathing off the
+// page underneath it: each layer holds its own.
+const SyncReport = createContext<((busy: boolean) => void) | null>(null)
+
 function useSyncFlag(painted: boolean) {
   const [inFlight, setInFlight] = useState(0)
   const track = useCallback(function track<T>(p: Promise<T>): Promise<T> {
     setInFlight(n => n + 1)
     return p.finally(() => setInFlight(n => n - 1))
   }, [])
-  return { syncing: inFlight > 0 && painted, track }
+  const syncing = inFlight > 0 && painted
+  const report = useContext(SyncReport)
+  // The cleanup is not housekeeping: a page whose body unmounts mid-flight (a
+  // roster left while its answer is still out) would otherwise leave the bar it
+  // no longer belongs to breathing for good.
+  useEffect(() => { report?.(syncing); return () => report?.(false) }, [syncing, report])
+  return { track }
 }
 
 /** The card look, carried by the rows themselves: only the ends are rounded. */
@@ -1586,7 +1425,7 @@ function FriendsView({ profile, onOpenFriend, search, bottomInset, onRosterTop }
   // Cache-first: this page stays mounted under a friend's profile, and removing
   // them there arrives as a cache write. See OwnedGroupView.
   const data = cached ?? fetched
-  const { syncing, track } = useSyncFlag(data != null)
+  const { track } = useSyncFlag(data != null)
   const load = useCallback(() => {
     track(myFriends())
       .then(fresh => { setFetched(fresh); friendsRoster.set(fresh) })
@@ -1641,7 +1480,6 @@ function FriendsView({ profile, onOpenFriend, search, bottomInset, onRosterTop }
         // the card never runs flush into the keyboard. Same as OwnedGroupView.
         bottomInset={search == null ? 0 : bottomInset}
         onTopMeasured={onRosterTop}
-        syncing={syncing}
         keyOf={f => f.user_id}
         // Knowing the count up front means a friendless account skips the
         // placeholder entirely and goes straight to the empty line. A search
@@ -1889,8 +1727,13 @@ function useRefetchOn(value: number | undefined, load: () => void): void {
 // settings sub-screen, the pending join requests, and the member roster. All
 // the editable config (name / description / public / approval / delete) lives
 // in GroupSettingsView below.
-function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onOpenMember, onLeft, bottomInset, onRosterTop }: {
+function OwnedGroupView({ group, initialRequestsOpen, initialPreviewOpen, search, onOpenRequest, onOpenMember, onLeft, bottomInset, onRosterTop }: {
   group: OwnedGroup
+  /** The circle's own popup starts OPEN: the last step of CREATING a circle is
+   *  meeting it as everybody else will (see CView's `preview`). It seeds the
+   *  same state the page's foot toggles, so the popup that comes up is the
+   *  page's one preview and is put away exactly like it. */
+  initialPreviewOpen?: boolean
   /** The queue drawer starts UNFOLDED: a notification about the queue lands
    *  here, and it must land on the people it is about (see CView). */
   initialRequestsOpen?: boolean
@@ -1937,7 +1780,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
 
   // Both round trips on this page go through the one flag, so the hairline is up
   // while either is out and gone only when the page is whole.
-  const { syncing, track } = useSyncFlag(members != null)
+  const { track } = useSyncFlag(members != null)
 
   // `track` wraps the REQUEST, not the chain that applies it: the flag has to
   // drop before the rows land, or the frame between the two paints the hairline
@@ -2085,7 +1928,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
   // hook every group head reads, so the face at the top is the real one whether
   // I own the group or only manage it (an unread roster simply yields none,
   // exactly as an admin-owned group does).
-  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(!!initialPreviewOpen)
   const brief: GroupBrief = { ...group, owner: useGroupHead(group).owner }
   // THE MARK IS THE APP'S OWN CIRCLES GLYPH (user directive 2026-08-02), the one
   // the dock's Circles key wears and the one a shared circle is named with on a
@@ -2127,7 +1970,6 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
         // itself; what a surface owes is only its own air off that new edge.
         bottomInset={search == null ? 0 : bottomInset}
         onTopMeasured={onRosterTop}
-        syncing={syncing}
         keyOf={m => m.user_id}
         // Nothing here yet is a PLACEHOLDER (the roster is on its way and its
         // size is already known); nothing that MATCHES is an answer, and it says
@@ -2553,23 +2395,41 @@ function ProfilePage({ profile, userId, name, image, insets, caption, onOpenFrie
   // under it, so `!isTop` is exactly "the popup is covered": it hides for as long
   // as that page is up and is back the moment it pops, by its X, a swipe or Back.
   const circles = useSharedCircles(!isTop)
+  // MY OWN CARD IS THE REAL CARD, NOT A FORM (user directive 2026-08-03): my
+  // row in a roster reads exactly as anyone else's page does — the facts I have
+  // stated, in the chips that state them, and nothing where a fact is missing.
+  // No placeholder inviting me to fill one in and no editor behind it: this is
+  // the profile as it is SEEN, and editing it is what the dock's profile key is
+  // for. The one thing a self card drops is the shared-circles chip, which of
+  // myself can only say I share every circle I am in (MatchCard's `self`).
+  //
+  // The roster row is a SNAPSHOT the server took when the list was read, so my
+  // own facts come off the store instead — what I changed from the dock a
+  // moment ago is on this card the moment it opens.
+  const mine = useUserStore(st => st.profile)
+  const shown = useMemo(() => (
+    self && profile && mine
+      ? { ...profile, family: mine.family ?? null, height: mine.height ?? null, smokes: mine.smokes ?? null }
+      : profile
+  ), [self, profile, mine?.family, mine?.height, mine?.smokes])
   return (
     <View style={s.profileFill}>
-      {profile ? (
+      {shown ? (
         // chromeInset lines the card's name/age chip up with the page's own
         // floating chrome. bottomChrome is the same question the bar below
         // answers for itself, asked once: with a bar the card stops above it and
         // its on-photo set ends at the card's own gutter; with none the card
         // fills the screen and clears the navigation bar itself.
         <MatchCard
-          match={profile}
+          match={shown}
           actions={[]}
           bottomInset={0}
           bottomChrome={profileActionBarShows(caption, actions)}
           chromeInset={insets.top}
           hideProximity
           self={self}
-          onCircleTap={n => circles.open(profile.user_id, profile.is_male, n)}
+          isForKids={self ? mine?.family?.isForKids ?? null : undefined}
+          onCircleTap={n => circles.open(shown.user_id, shown.is_male, n)}
         />
       ) : (
         <View style={[s.content, s.profileBare]}>
@@ -2885,9 +2745,14 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
       // this moment and the manage + settings pages under this one are not his
       // any more. They are dropped rather than re-seeded (the roster behind
       // them would come back `not_manager` on its next read).
-      if (openGroup) onGroupDropped(group.id)
-      else onGroupChanged({ ...group, is_owner: false })
-    } finally { setBusy(null); setConfirmTransfer(false); onDone() }
+      // Deferred to the confirm's `onClosed` for the reason `doLeave` below is:
+      // every one of these unmounts the page the question is standing in.
+      afterConfirm.current = () => {
+        if (openGroup) onGroupDropped(group.id)
+        else onGroupChanged({ ...group, is_owner: false })
+        onDone()
+      }
+    } finally { setBusy(null); setConfirmTransfer(false) }
   }
   // I walk out of the circle. Byte for byte what the group popup's leave does
   // (GroupSheet.quit) — the endpoint, and the cached roster going with the
@@ -2896,12 +2761,28 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
   // standing among any more. No `onDone` beside it, because `onGroupDropped`
   // takes THIS page too (see removeGroupViews), and the hub it lands on repaints
   // off the store's own summary, which the server has already rewritten.
+  //
+  // ONE WINDOW AT A TIME (2026-08-03, the same fix as the group popup's leave):
+  // the question is a Modal standing INSIDE this page, and the answer is what
+  // takes the page off the stack — so closing the confirm and unmounting its
+  // host on the same commit tore that window down while it was still on its way
+  // out, and Android left it behind, invisible, over the whole app, swallowing
+  // every touch. The screen froze the moment the popup finished sliding away.
+  // The tear-down therefore waits for the confirm's own `onClosed`, which is the
+  // app's existing way of letting one Modal follow another.
+  const afterConfirm = useRef<(() => void) | null>(null)
+  const runAfterConfirm = () => {
+    const fn = afterConfirm.current
+    if (!fn) return
+    afterConfirm.current = null
+    fn()
+  }
   const doLeave = async () => {
     setBusy('leave'); tapWarning()
     try {
       await leaveGroup(group.id)
       dropGroupCaches(group.id)
-      onGroupDropped(group.id)
+      afterConfirm.current = () => onGroupDropped(group.id)
     } finally { setBusy(null); setConfirmLeave(false) }
   }
 
@@ -2983,6 +2864,7 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
         busy={busy === 'transfer'}
         onCancel={() => setConfirmTransfer(false)}
         onConfirm={doTransfer}
+        onClosed={runAfterConfirm}
       />
       {/* The same question the group popup asks, word for word — one leave, one
           confirmation of it. */}
@@ -2994,6 +2876,7 @@ function MemberProfileView({ group, member, onDone, onGroupChanged, onGroupDropp
         busy={busy === 'leave'}
         onCancel={() => setConfirmLeave(false)}
         onConfirm={doLeave}
+        onClosed={runAfterConfirm}
       />
     </>
   )
@@ -3105,7 +2988,6 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           max={GROUP_NAME_MAX}
           singleLine
           placeholder={t('circles.namePlaceholder')}
-          updateLabel={t('circles.descUpdate')}
           inputStyle={s.nameInput}
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
@@ -3123,7 +3005,6 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           max={GROUP_DESCRIPTION_MAX}
           allowEmpty
           placeholder={t('circles.descriptionPlaceholder')}
-          updateLabel={t('circles.descUpdate')}
           inputStyle={s.descEditorInput}
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
@@ -3156,7 +3037,6 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
           keyboardType="url"
           autoCapitalize="none"
           placeholder={linkPlaceholder}
-          updateLabel={t('circles.descUpdate')}
           inputStyle={s.linkInput}
           footerStyle={s.descFooter}
           hintStyle={s.descHint}
@@ -3231,7 +3111,7 @@ function GroupSettingsView({ group, onChanged, onDeleted }: { group: OwnedGroup;
 // the whole catalogue, which replaces it. So there is never a blank beat while
 // a request is in flight, and the eventual list is not limited to what happened
 // to be downloaded.
-function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInset: number; onDone: () => void }) {
+function FindView({ query: q, bottomInset }: { query: string; bottomInset: number }) {
   // The status chip says what I am to the group I am looking at, so it is my
   // own sex that inflects it.
   const isMale = useMyGender()
@@ -3254,19 +3134,6 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
   const [declined, setDeclined] = useState<Record<string, boolean>>({})
   const [preview, setPreview] = useState<PublicGroup | null>(null)  // group-details popup
   const seq = useRef(0)
-  // Answering the popup is the end of the search (user directive 2026-07-28 for
-  // a request, 2026-08-01 for a join): the popup goes, and the page goes with
-  // it. Set when the tap JOINED or queued a request — never when the popup was
-  // simply put away, which leaves the search exactly where it was — and read
-  // once the popup has actually unmounted: the page must not start sliding off
-  // under a Modal that is still on screen, since a Modal is its own window and
-  // would not ride down with it.
-  const doneAfterPreview = useRef(false)
-  const onPreviewClosed = useCallback(() => {
-    if (!doneAfterPreview.current) return
-    doneAfterPreview.current = false
-    onDone()
-  }, [onDone])
 
   const remember = useCallback((list: PublicGroup[]) => {
     for (const g of list) if (!pool.current.has(g.id)) pool.current.set(g.id, g)
@@ -3326,20 +3193,15 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
     // approval-gated group becomes a pending REQUEST, an open one joins.
     if (g.requires_approval) setRequested(m => ({ ...m, [g.id]: true }))
     else setJoined(m => ({ ...m, [g.id]: true }))
-    // THE POPUP GOES ON THE TAP, WHICHEVER OF THE TWO IT WAS, AND THE PAGE GOES
-    // WITH IT (user directive 2026-08-01, carrying the request's own rule of
-    // 2026-07-28 over to the join, which used to leave both standing). A join
-    // and a request are one act — I found a circle and I am in it, or waiting to
-    // be — so they may not end differently; and a popup left open after a join
-    // turns into its own opposite the moment it repaints, the surface that
-    // offered to let me in now offering to share it and to LEAVE, which reads as
-    // the app answering the tap with the way to undo it.
-    // Leaving on the tap rather than on the answer is deliberate: where I now
-    // stand is the HUB's to say, and it says it off the same summary refresh —
-    // a member row, a pending one, or a declined one for the rare case the
-    // server turns the request down (which is why the reconcile below no longer
-    // having a row to repaint costs nothing, and does not have to).
-    doneAfterPreview.current = true
+    // THE POPUP GOES ON THE TAP AND THE SEARCH STAYS (user directive
+    // 2026-08-03, reversing the "the page goes with it" rule of 2026-08-01/
+    // 2026-07-28). Joining a circle, or asking to, is not the end of looking for
+    // circles: the page I was searching in is where I want to be afterwards, and
+    // its own row says where I now stand (the reconcile below repaints it). The
+    // POPUP still goes on the tap, for the reason it always did — left open it
+    // repaints into its own opposite, the surface that offered to let me in now
+    // offering to share it and to LEAVE, which reads as the app answering the
+    // tap with the way to undo it.
     setPreview(null)
     // A public group is joinable by anyone who found it in search; joining
     // reuses the redeem path under the hood (no manual code needed).
@@ -3447,7 +3309,6 @@ function FindView({ query: q, bottomInset, onDone }: { query: string; bottomInse
         group={preview ? groupBrief(preview) : null}
         status={preview ? myStatus(preview) : 'none'}
         onClose={() => setPreview(null)}
-        onClosed={onPreviewClosed}
         onJoin={() => { if (preview) joinPublic(preview) }}
         // The popup left / cancelled / cleared: this page keeps its own copy of
         // where I stand (the row's chip reads it), so it has to be told.
@@ -3536,7 +3397,15 @@ const s = StyleSheet.create({
   // The roster is a FlatList, so `card` can't wrap it — the rows carry the card
   // themselves and only the ends are rounded. The list BOX carries the same
   // radius so a row clipped at the bottom edge is clipped round, not square.
+  // The outer box: what is measured, and what the lift plate is hung in. It does
+  // NOT clip, so that plate's shade can leave it.
+  rosterFill: { flex: 1 },
   rosterBox: { flex: 1, borderRadius: RADIUS, overflow: 'hidden' },
+  // The card's ground and its lift, behind the rows — see the render.
+  rosterLift: {
+    position: 'absolute', top: 0, start: 0, end: 0,
+    backgroundColor: SURFACE, borderRadius: RADIUS, boxShadow: CARD_SHADOW,
+  },
   rosterList: { flex: 1 },
   // A person's page: the card takes the room the bar under it leaves (that bar
   // is ProfileActionBar, in MatchCard.tsx, and it owns every gap in itself).
@@ -3550,7 +3419,7 @@ const s = StyleSheet.create({
   rosterRow: { backgroundColor: SURFACE },
   rosterRowFirst: { borderTopLeftRadius: RADIUS, borderTopRightRadius: RADIUS },
   rosterRowLast: { borderBottomLeftRadius: RADIUS, borderBottomRightRadius: RADIUS },
-  card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden' },
+  card: { backgroundColor: SURFACE, borderRadius: RADIUS, overflow: 'hidden', boxShadow: CARD_SHADOW },
   // The waiting queue's drawer, opened in the middle of the white card: the
   // PAGE's own tint, so the people inside it read as a set held INSIDE the
   // roster rather than as more of it (user directive 2026-07-31). It clips,
@@ -3585,28 +3454,6 @@ const s = StyleSheet.create({
   section: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: INK_MUTED, marginTop: MD },
   // The header's trailing controls, side by side on the bar's end corner.
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: SM },
-  // `flexShrink` is what lets the popup obey the sheet's height cap: the body
-  // gives, and inside it only the description's SheetScroll declares a shrink of
-  // its own, so that is where the whole overflow lands.
-  // No gutter of its own: that is the popup's, for every popup in the app
-  // (BottomSheet.tsx). The blocks inside it are one piece of writing about the
-  // group, so they stand at the popup's title-to-description gap.
-  sheetWrap: { gap: SHEET_GAP.desc, flexShrink: 1 },
-  // The introduction inside the SheetScroll: it keeps the same SM rhythm the
-  // sheet body spaces its blocks by, so a head that scrolls looks exactly like
-  // the head that does not (a short group's popup is unchanged).
-  sheetHead: { gap: SHEET_GAP.desc },
-  // (The face, the fact line and the name inside it are `GroupHead` in
-  // CircleBits — the one block that says WHICH group this is, shared with a
-  // person's page inside that group. Nothing about their look lives here any
-  // more, including the avatar's own air.)
-  //
-  // What the group wrote about itself IS the popup's description (SHEET_DESC in
-  // BottomSheet.tsx) — same size, same full-strength ink, same centring as the
-  // sentence under any other popup's title. It used to run at a line height of
-  // its own (1.5× against the app's 1.4×). The gap above it is the head's `gap`,
-  // so it adds none: two would stack.
-  sheetDesc: { ...SHEET_DESC, marginTop: 0 },
   // (The "more details" line is gone, 2026-08-02: it was an underlined line of
   // text at the popup's title size, standing alone between the note and the
   // actions. It is an option in the foot's strip now — see `details` in
@@ -3614,7 +3461,7 @@ const s = StyleSheet.create({
   // writing that was really a control.)
   // Group-description editor card (hosts the shared EditableText). The input is
   // a plain readable block; the footer mirrors the bio editor's hint+Update.
-  descCard: { backgroundColor: SURFACE, borderRadius: RADIUS, padding: MD, gap: SM },
+  descCard: { backgroundColor: SURFACE, borderRadius: RADIUS, padding: MD, gap: SM, boxShadow: CARD_SHADOW },
   // No line height of its own: the font's leading, like every other block of text
   // in the app. It used to run at 1.5x (a local `lhSm()` helper) to give the
   // editor a little more air than a paragraph, which a declared dp line box
@@ -3630,21 +3477,20 @@ const s = StyleSheet.create({
   linkCard: { flex: 1 },
   linkTest: { paddingVertical: SM },
   linkTestOff: { opacity: DISABLED_OPACITY },
-  descFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: MD },
+  // Under a field: the hint slot alone, on the rare frame there is one (the
+  // Update button that shared this row is gone, 2026-08-03).
+  descFooter: { marginTop: SM },
   descHint: { fontSize: TEXT.md, color: INK_MUTED },
   // Why a field was refused, under the field it belongs to. Full-strength ink
   // (NEGATIVE): it is the reason nothing was saved, not a hint.
   fieldError: { fontSize: TEXT.md, color: NEGATIVE },
   descInput: { minHeight: 54, paddingTop: 0 },
-  pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS },
+  pillBtn: { paddingHorizontal: MD, paddingVertical: SM, borderRadius: RADIUS, boxShadow: CARD_SHADOW },
   pillBtnInk: { fontSize: TEXT.md, fontWeight: WEIGHT.medium, color: WHITE },
-  // THE footnote of this page, wherever one stands: above a popup's button (what
-  // this group is to me right now, what a friend is worth) and under an empty
-  // list's sentence (what belonging is worth). It is a HINT, not a paragraph, so
-  // it takes the rank below the body (`sm`, user directive 2026-07-29): at body
-  // size it read as a second description competing with the one thing it is
-  // explaining, and what follows it is what the eye should land on.
-  note: { fontSize: TEXT.sm, color: INK_MUTED, textAlign: 'center', marginTop: XS },
+  // The app's one circles footnote (NOTE_TEXT in CircleBits), wherever one
+  // stands on this surface: above a popup's button and under an empty list's
+  // sentence. The margin is this file's, for the blocks that carry no gap.
+  note: { ...NOTE_TEXT, marginTop: XS },
   // The sentence that stands in for a list: it sits in the card the strips would
   // have filled, so its block takes the STRIP's gutter (`row`'s
   // paddingHorizontal) — without it a long line wraps flush to the card's edges
@@ -3682,7 +3528,9 @@ const s = StyleSheet.create({
   kindList: { borderRadius: RADIUS, padding: XS, gap: XS },
   kindItem: { paddingVertical: SM, paddingHorizontal: SM, borderRadius: RADIUS, gap: XS },
   toggleItem: { flex: 1, alignItems: 'center', paddingVertical: SM, borderRadius: RADIUS, gap: XS },
-  toggleOn: { backgroundColor: SURFACE },
+  // The chosen stop: the same white card as every other one on the page, so a
+  // tile that is lifted off the page tint says it the same way (2026-08-03).
+  toggleOn: { backgroundColor: SURFACE, boxShadow: CARD_SHADOW },
   // Plain weight, both lines (user directive 2026-07-30): the three stops are a
   // list of options, not headings, and what tells the chosen one apart is its
   // white tile and its full-strength INK. SIZE and COLOR carry the hierarchy

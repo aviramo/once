@@ -1145,6 +1145,40 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // Delete one of MY OWN messages, for both sides. The row is never removed:
+      // the two histories must stay identical and a reply quoting this message
+      // still points at its key, so the content is stripped and `deleted_at` is
+      // stamped — the tombstone both clients draw. Keyed by (user_id, created_at),
+      // the composite the whole chat is keyed by, and scoped to the caller's own
+      // rows, so a client can only ever delete what it sent.
+      case "chat_delete": {
+        const delBody = body.chat_delete as { created_at?: unknown } | undefined;
+        const raw = typeof delBody?.created_at === "string" ? Date.parse(delBody.created_at) : NaN;
+        if (!Number.isFinite(raw)) return log.error("chat_delete", "no_message", 400);
+        const key = new Date(raw).toISOString();
+        await Tools.invoke(
+          log,
+          "chat_delete",
+          Tools.supabase.from("chat")
+            .update({
+              deleted_at: new Date().toISOString(),
+              text: null,
+              image_key: null,
+              audio_key: null,
+              audio_bars: null,
+              audio_duration_ms: null,
+              location: null,
+              schedule: null,
+              reply_to: null,
+            })
+            .eq("user_id", user.user_id)
+            .eq("created_at", key)
+            .is("deleted_at", null),
+        );
+        await user.persist(log);
+        break;
+      }
+
       case "logout": {
         user.data.push_token = null;
         user.location = null;

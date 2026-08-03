@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { View, Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
 import { Chip } from './Chip'
@@ -7,7 +7,7 @@ import { AVATAR } from './CircleBits'
 import { tap } from '../lib/haptics'
 import type { MetaPart } from '../lib/meta'
 import { XS, SM, MD, TEXT, WEIGHT } from '../tokens'
-import { INK, LINE, INK_WASH } from '../colors'
+import { INK, LINE } from '../colors'
 
 // THE row of this app (user directive 2026-07-29): a leading glyph or face, a
 // title, and the facts about it on the app's one fact line under that title —
@@ -152,7 +152,14 @@ export function Strip({ first, style, onPress, ...body }: StripProps & {
   style?: StyleProp<ViewStyle>
   onPress?: () => void
 }) {
-  const [pressed, setPressed] = useState(false)
+  // NO PRESS MARK ON A STRIP (user directive 2026-08-03). A row does not report
+  // that a finger is on it — the finger is on it, the user can see that — and the
+  // one thing the mark actually managed to say was wrong: a scroll and a page
+  // being dragged away both begin as a touch on a row, so the tint lit on every
+  // one of them and read as a row that had been chosen. What confirms a tap is
+  // the HAPTIC, which fires with the press and cannot be triggered by a drag.
+  // Deleted with the mark: the pressed state, the touch-move / touch-end cancels
+  // it needed to survive a scroll, and the pull-engaged reaction.
   const facts = stripFacts(body.meta)
   // A strip that says something UNDER the name breathes (MD); one that is a name
   // and nothing else is the tighter people row (SM) every roster is made of. One
@@ -161,12 +168,7 @@ export function Strip({ first, style, onPress, ...body }: StripProps & {
   const content = <StripBody {...body} />
   if (!onPress) return <View style={rowStyle}>{content}</View>
   return (
-    <Pressable
-      onPress={() => { tap(); onPress() }}
-      onPressIn={() => setPressed(true)}
-      onPressOut={() => setPressed(false)}
-      style={[rowStyle, pressed && { backgroundColor: INK_WASH }]}
-    >
+    <Pressable onPress={() => { tap(); onPress() }} style={rowStyle}>
       {content}
     </Pressable>
   )

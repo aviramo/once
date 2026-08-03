@@ -17,8 +17,8 @@ import { useAuthStore } from '../stores/authStore'
 import { useUserStore } from '../stores/userStore'
 import { tap, tapMedium, tapSuccess } from '../lib/haptics'
 import { t } from '../i18n'
-import { SM, RADIUS, STROKE, ICON } from '../tokens'
-import { INK, INK_HINT, INK_DIM, PHOTO_CHROME, SURFACE, WHITE_MID, SHADOW_BLACK } from '../colors'
+import { SM, RADIUS, STROKE, ICON, CARD_SHADOW } from '../tokens'
+import { INK, INK_HINT, INK_DIM, PHOTO_CHROME, SURFACE, WHITE_MID } from '../colors'
 import { FIELD_SKIN } from '../field'
 import { MIN_PHOTOS, MAX_PHOTOS } from '../lib/photos'
 import { ConfirmDialog } from './ConfirmDialog'
@@ -776,7 +776,7 @@ const photoStyles = StyleSheet.create({
     width: 24, height: 24, borderRadius: 12,
     backgroundColor: PHOTO_CHROME,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: SHADOW_BLACK, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.12, shadowRadius: 3, elevation: 3,
+    boxShadow: CARD_SHADOW,
   },
   // Empty slot: a white surface behind the warm hairline — the same skin the
   // onboarding name/date/bio fields and the login email field wear, since an
