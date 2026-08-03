@@ -24,6 +24,10 @@ export const XL = 40   // hero spacing, largest tier
 
 // Border radii — distinct semantic axis from spacing.
 export const RADIUS = 12
+// A radius bigger than any box that takes it: what makes a tile a PILL, and a
+// square one a circle. Stated once so "fully round" is a token rather than a
+// number re-typed at each call site.
+export const PILL_RADIUS = 999
 
 // Button / input minimum height. Also reused as the brand-logotype font size
 // (see TEXT.xxl below) — the "Once" logo on the login screen reads at this
@@ -452,6 +456,16 @@ export const SHEET_SHADOW = '0px -4px 24px 0px rgba(0,0,0,0.12)'
 // on its own that it is a foreground, and the lighter stop keeps the page above
 // it clean. Anything heavier starts painting the grey band described above.
 export const DOCK_SHADOW = '0px -8px 18px 0px rgba(0,0,0,0.10)'
+
+// The lift of a MARK — the little white disc a dock key's count stands on. It
+// is `LIFT_SHADOW`'s idea at a fraction of its strength and with NO offset at
+// all: that one is for a tile the size of a button or a paragraph, and the same
+// drop under a single digit reads as the digit having come loose from the strip.
+// SYMMETRIC (user directive 2026-08-02) because the thing it lifts is a CIRCLE
+// standing beside a glyph, not a card resting on a page: a disc with a shadow
+// pooled under one edge reads as tilted. Stated as a boxShadow string, like the
+// dock's own, since an Android `elevation` can only ever drop downwards.
+export const MARK_SHADOW = '0px 0px 6px 0px rgba(0,0,0,0.14)'
 
 // ── The lift of a surface that came from below ─────────────────────────────
 // The upward shadow on the TOP edge of every full-screen surface that rises

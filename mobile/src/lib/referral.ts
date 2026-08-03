@@ -1,8 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Share } from 'react-native'
 import { requireOptionalNativeModule } from 'expo-modules-core'
 
 import { invoke } from './api'
+import { shareInvitation } from './share'
 import { referralUrl, friendInviteUrl } from './links'
 import { linkFriendByCode, redeemInvite } from './circles'
 import { STORAGE } from '../keys'
@@ -163,17 +163,9 @@ export async function shareReferral(profile: WithReferral): Promise<boolean> {
   const code = referralCode(profile)
   if (!code) return false
   const url = referralUrl(code)
-  try {
-    await Share.share({
-      // Android reads `message` only, so the URL has to be inside it. The
-      // newline puts the link on its own line so it unfurls into its own
-      // preview card below the invitation sentence.
-      message: `${t('credits.invite.shareText')}\n${url}`,
-    })
-    return true
-  } catch {
-    return false
-  }
+  // The newline puts the link on its own line so it unfurls into its own
+  // preview card below the invitation sentence.
+  return shareInvitation(`${t('credits.invite.shareText')}\n${url}`)
 }
 
 /** Share the FRIEND invite link (/f/<CODE>). Same per-user code as the credit
@@ -184,10 +176,5 @@ export async function shareFriendInvite(profile: WithReferral): Promise<boolean>
   const code = referralCode(profile)
   if (!code) return false
   const url = friendInviteUrl(code)
-  try {
-    await Share.share({ message: `${t('credits.invite.shareText')}\n${url}` })
-    return true
-  } catch {
-    return false
-  }
+  return shareInvitation(`${t('credits.invite.shareText')}\n${url}`)
 }

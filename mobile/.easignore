@@ -1,15 +1,71 @@
-# Files/dirs the EAS build ignores when packing the project archive.
-# Same shape as .gitignore. Only affects what gets uploaded to EAS; the git
-# repo and local dev tree are untouched.
+# What EAS leaves OUT of the project archive it uploads to build.
 #
-# EVERYTHING that isn't runtime lives under mobile/store/ (Play/App Store
-# screenshots, capcut stills, review videos, debug drops from adb screencap
-# and the like). Keep it one line here — one place to look, one place to add
-# to. If a new non-runtime folder shows up under mobile/, move it into store/
-# rather than adding a new rule.
-store/
+# CAREFUL: when this file exists, EAS uses it INSTEAD OF .gitignore, not in
+# addition to it. So it has to repeat everything .gitignore says — otherwise
+# node_modules, the generated android/ folder and the downloaded signing
+# credentials all get uploaded. Keep the two in step; the only intended
+# difference is the `store/` block at the bottom.
 
-# Local caches — Expo's own build/dev output, never part of the shipped app.
+# dependencies
+node_modules/
+
+# Expo
 .expo/
 dist/
 web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Signing credentials pulled down with `eas credentials`. The .jks is covered
+# above, but credentials.json holds the keystore + key PASSWORDS in plaintext.
+# A cloud build must never receive these: EAS holds the keystore server-side
+# and signs with it there.
+credentials.json
+credentials/
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# Firebase credentials
+# google-services.json is intentionally NOT ignored (the build requires it)
+GoogleService-Info.plist
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders. These matter more here than in git: shipping a
+# populated android/ makes EAS treat the project as bare and skip prebuild, so
+# it would build the locally-generated native project — including the local
+# signing config, which references gradle properties that only exist on this
+# machine.
+/ios
+/android
+modules/*/android/build/
+modules/*/android/.gradle/
+
+# ── The only thing this file adds over .gitignore ──────────────────────────
+# Store listing artwork, review stills and screenshot sources: tracked in git
+# (they are real work), but no build reads them, and they are ~64 MB of the
+# upload. Anything else non-runtime should go under store/ rather than earn a
+# new rule here.
+store/

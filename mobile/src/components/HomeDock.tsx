@@ -1,13 +1,13 @@
 import { type ReactNode } from 'react'
-import { StyleSheet } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import Animated from 'react-native-reanimated'
 import { Text } from './AppText'
 import { NotifyDot } from './RoundButton'
 import { OptionStrip, type StripOption } from './OptionStrip'
 import { useCountBlink } from '../hooks/useCountBlink'
 import { inkOffset, FONT_SCALE } from '../fonts'
-import { MD, TEXT, WEIGHT, DOCK_SHADOW } from '../tokens'
-import { INK, INK_SUBTLE, PAGE } from '../colors'
+import { XS, MD, TEXT, WEIGHT, DOCK_SHADOW, MARK_SHADOW, PILL_RADIUS } from '../tokens'
+import { INK, INK_SUBTLE, PAGE, PHOTO_CHROME } from '../colors'
 
 // ── The dock — home's strip of four ────────────────────────────────────────
 //
@@ -124,14 +124,14 @@ export function HomeDock({ items, bottom }: {
     // ternary that used to stand here, because WHICH mark it is can change while
     // the dock is up (a request arrives behind a key that was clean) and the
     // number has to know it changed — see DockMarker.
-    marker: <DockMarker count={count} badge={badge} />,
-    // The deposit, at the mirrored corner: the SAME component, so the two halves
-    // of the wallet are the same mark down to the blink, and neither can be
-    // changed without the other. Passed even when there is nothing to say, for
-    // the reason the marker above always is — a deposit APPEARING is the change
-    // most worth marking, and a component that mounts with it has nothing to
-    // compare against.
-    markerStart: <DockMarker count={held} muted />,
+    // The deposit hangs UNDER it (user directive 2026-08-02), in the same corner
+    // rather than at the mirrored one: the two are one wallet said twice, so they
+    // read down a single column instead of straddling the glyph from either side.
+    // The SAME component again, so the two halves are the same mark down to the
+    // blink. Passed even when there is nothing to say, for the reason the marker
+    // itself always is — a deposit APPEARING is the change most worth marking,
+    // and a component that mounts with it has nothing to compare against.
+    marker: <DockMarker count={count} badge={badge} below={<DockMarker count={held} muted />} />,
   }))
   return <OptionStrip options={options} style={[styles.strip, { paddingBottom: bottom }]} />
 }
@@ -156,7 +156,7 @@ export function HomeDock({ items, bottom }: {
 // compare against — if this component came and went with the digit. What must
 // never blink is the dock simply appearing with numbers already on it, so the
 // first value each marker ever sees is recorded and not announced.
-function DockMarker({ count, badge, muted }: {
+function DockMarker({ count, badge, muted, below }: {
   count?: number
   badge?: boolean
   /** Paint the number a step back from the key's own ink: the deposit half of
@@ -166,6 +166,13 @@ function DockMarker({ count, badge, muted }: {
    *  ramp's own "secondary label" step. Not `INK_HINT`: at 0.48 it lands on the
    *  app's shut-door fade (DISABLED_OPACITY 0.45), and nothing here is shut. */
   muted?: boolean
+  /** A second mark hanging under this one, in the same corner — the deposit
+   *  under the balance. It is OUT OF FLOW (`top:'100%'`), which is the whole
+   *  point: the slot centres the mark's box on the glyph's top edge, so anything
+   *  taking part in that box would move the mark it hangs from. Nothing here
+   *  measures anything — the pair stays honest at any font scale because the
+   *  lower mark is hung off the upper one's own bottom edge. */
+  below?: ReactNode
 }) {
   // On the WRAPPER, not on the text: the digit is laid out by the marker slot
   // and only its paint changes, so nothing about the blink can move it. The
@@ -191,13 +198,18 @@ function DockMarker({ count, badge, muted }: {
   // left to guess from the app's direction it would measure a Hebrew letter body
   // (0.600 em against 0.714) and lift the digit by two and a half times what it
   // owes — worse than not correcting at all.
-  if (count != null) return (
-    <Animated.View style={[{ transform: [{ translateY: -inkOffset(TEXT.sm, FONT_SCALE, String(count)) }] }, blinkStyle]}>
+  const mark = count != null ? (
+    <Animated.View style={[styles.countTile, muted && styles.countTileMuted, { transform: [{ translateY: -inkOffset(TEXT.sm, FONT_SCALE, String(count)) }] }, blinkStyle]}>
       <Text style={[styles.count, muted && styles.countMuted]}>{count}</Text>
     </Animated.View>
+  ) : badge ? <NotifyDot style={styles.markerDot} /> : null
+  if (!below) return mark
+  return (
+    <View style={styles.markStack}>
+      {mark}
+      <View style={styles.markBelow}>{below}</View>
+    </View>
   )
-  if (badge) return <NotifyDot style={styles.markerDot} />
-  return null
 }
 
 const styles = StyleSheet.create({
@@ -222,6 +234,34 @@ const styles = StyleSheet.create({
   // that places it. This is the only line of the dot's placement that lives
   // outside OptionStrip, which states the rest once, for both marks.
   markerDot: { position: 'relative' },
+  // THE NUMBER STANDS ON THE APP'S WHITE TILE (user directive 2026-08-02): the
+  // same white ground every other small tile in the app stands on, so a count
+  // beside a glyph reads as an object lifted off the page rather than as two
+  // digits floating on it — which is what it was against the strip's own PAGE
+  // tint. The lift is `MARK_SHADOW`, not the tiles' `LIFT_SHADOW`: a drop meant
+  // for a button under a single digit reads as the digit coming loose, and this
+  // one is symmetric because a disc beside a glyph has no side to rest on.
+  // WITH NO PADDING: the digit's own line box is the tile, so the mark
+  // stays exactly the size the slot placed it at and the tile can never push a
+  // count out past the strip's marker lane. The lift lives on the wrapper and
+  // not on the text, because a shadow belongs to the box.
+  // AND IT IS A CIRCLE (user directive 2026-08-02) — the shape every other small
+  // white mark in the app takes when it stands alone beside a glyph (the notify
+  // dot, a round button): a mark annotating a key is a disc, not a card. It is
+  // stated as `aspectRatio: 1` and NOT as a fixed diameter, because the tile
+  // still carries no padding: the digit's own line box sizes one axis and Yoga
+  // matches the other, so the disc is exactly as big as the number it holds at
+  // every font scale, and a two-digit count grows the circle instead of
+  // overflowing it. The ink is centred in it by plain flexbox — a mark in a tile
+  // is centred in the TILE, never on a line of text.
+  countTile: {
+    backgroundColor: PHOTO_CHROME,
+    aspectRatio: 1,
+    borderRadius: PILL_RADIUS,
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: MARK_SHADOW,
+  },
   // The quantity itself: ink and nothing else, at the caption's size and weight
   // so the key's two pieces of text are one family, in the glyph's own purple.
   count: {
@@ -233,4 +273,16 @@ const styles = StyleSheet.create({
   // weight, same slot — so the pair reads as one wallet at two strengths rather
   // than as two different kinds of mark.
   countMuted: { color: INK_SUBTLE },
+  // THE DEPOSIT'S DISC IS THE PAGE'S OWN GROUND (user directive 2026-08-02): the
+  // balance is money to spend and stands on white, the deposit is money already
+  // committed and stands on the tint the strip itself is painted in, so the pair
+  // is one wallet at two strengths in its GROUND as well as in its ink. Only the
+  // colour changes — the same disc, the same lift, the same slot.
+  countTileMuted: { backgroundColor: PAGE },
+  // The column of two: the upper mark is the box the slot places, and the lower
+  // one is hung off its bottom edge and out of its flow, so the pair reads down
+  // one line without the balance moving because a deposit appeared. Centred on
+  // the mark above it, whichever of them is the wider number.
+  markStack: { alignItems: 'center' },
+  markBelow: { position: 'absolute', top: '100%', marginTop: XS },
 })

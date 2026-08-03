@@ -2034,12 +2034,28 @@ export default function HomePage() {
   // empty-pane text hidden while the old card is still visually exiting,
   // even after `state` has already flipped to null/free.
   const [cardExiting, setCardExiting] = useState(false)
+  // A CARD THAT RODE OFF DOES NOT FALL A SECOND TIME. A committed 'slideOff'
+  // pull parks the pane's wrapper off-screen and the card is unmounted a
+  // round trip later — but every path that drops it also calls
+  // `page1Pull.reset()`, which puts the wrapper back at 0 in the very commit
+  // that removes the card, while RisingCard's SlideOutDown still holds it
+  // mounted for its exit. So the card the user had just dragged away came
+  // back up and slid down again (reported on a chat that had ended, where
+  // nothing rises over the flash to hide it). The exit is skipped for the
+  // card that was ridden off: it is already where the exit would take it.
+  const [cardSlidOff, setCardSlidOff] = useState(false)
   const prevDisplayedIdRef = useRef<string | null>(displayedMatch?.user_id ?? null)
   useEffect(() => {
     const prev = prevDisplayedIdRef.current
     const curr = displayedMatch?.user_id ?? null
     prevDisplayedIdRef.current = curr
+    // Whatever the card is now, it arrived under its own power — the ride-off
+    // belonged to the one that left.
+    if (prev !== curr) setCardSlidOff(false)
     if (prev && !curr) {
+      // The card is off the tree now (a ridden-off one takes no exit, see
+      // cardSlidOff), so returning the pane to rest moves nothing on screen.
+      page1Pull.reset()
       setCardExiting(true)
       const timer = setTimeout(() => setCardExiting(false), 400)
       return () => clearTimeout(timer)
@@ -2376,7 +2392,12 @@ export default function HomePage() {
       setDisplayedMatch(null)
       setPreloadingMatch(null)
       setLoadingProfile(false)
-      page1Pull.reset()
+      // NO reset() here. `reset` writes pullY on the UI thread THIS instant,
+      // while the removal above is a React state change that lands a frame or
+      // more later — so a card that had been ridden off was slammed back to
+      // rest, in full view, and then vanished. The pull is returned to rest
+      // once the card is actually gone (the exit effect below), and every
+      // path that mounts a NEW card resets before mounting it.
       // Skip found nobody â€” resolve the name-slide to the (now "Once") label.
       startNameRise()
       searchingTimer = setTimeout(() => {
@@ -2671,6 +2692,12 @@ export default function HomePage() {
   const page2OtherMale = page2DeadInvite?.is_male ?? null
   const page2MessageTitle = page2Message ? tgg(`home.locked.page2.${page2Message}.title` as never, isMale, page2OtherMale) : ''
   const page2MessageDesc = page2Message ? tgg(`home.locked.page2.${page2Message}.desc` as never, isMale, page2OtherMale) : ''
+  // The one WORD the heading chip states where the clock was, keyed by the same
+  // raw `message` the title is (user directive 2026-08-02) — the slot used to say
+  // "ended" for every one of the thirteen endings. Gendered by the OTHER person
+  // on both boards: every verb here is theirs, so `tg` and not `tgg`.
+  const page1MessageWord = page1Message ? tg(`home.locked.page1.${page1Message}.word` as never, matchIsMale) : ''
+  const page2MessageWord = page2Message ? tg(`home.locked.page2.${page2Message}.word` as never, page2OtherMale) : ''
 
   // A find tapped before the app finished booting / refocusing is held here
   // until startup settles, instead of being swallowed by a `disabled` button.
@@ -3320,8 +3347,10 @@ export default function HomePage() {
   pullCommitRef.current =
     displayedCardMode === 'waiting' ? openPage1Message
     : displayedCardMode === 'chat' ? () => { tap(); setChatMenuOpen(true) }
-    : page1Ended ? page1Back
-    : runIgnore
+    // The two releases that ride the card off (see cardSlidOff) say so before
+    // they fire, so the render that later drops the card carries the fact.
+    : page1Ended ? () => { setCardSlidOff(true); page1Back() }
+    : () => { setCardSlidOff(true); runIgnore() }
 
   // The Circles awareness nudge that used to live here â€” a watched-profile
   // counter that threw the hub + a popup over the card after the third face â€”
@@ -3562,6 +3591,7 @@ export default function HomePage() {
                       <RisingCard
                         key={displayedMatch.user_id}
                         animateEnter={matchHasMountedRef.current}
+                        animateExit={!cardSlidOff}
                         style={styles.matchCardWrap}
                       >
                         <View style={styles.matchPhoto}>
@@ -3586,7 +3616,7 @@ export default function HomePage() {
                             // the word that ends it.
                             countdown={page1Countdown}
                             onMessage={page1HasMessage ? openPage1Message : undefined}
-                            trailingLabel={page1Ended ? t('home.cardEnded') : undefined}
+                            trailingLabel={page1Ended ? page1MessageWord : undefined}
                             trailingAction={page1Trailing}
                           />
                         </View>
@@ -3679,7 +3709,7 @@ export default function HomePage() {
                         chromeInset={topInset}
                         countdown={page2Countdown}
                         onMessage={page2HasMessage ? openPage2Message : undefined}
-                        trailingLabel={page2Ended ? t('home.cardEnded') : undefined}
+                        trailingLabel={page2Ended ? page2MessageWord : undefined}
                       />
                     ) : null}
                   </OverlaySheet>

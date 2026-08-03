@@ -16,37 +16,47 @@ Default language: **Hebrew (Israel) — he-IL**. Add English (United States) —
 |---|---|
 | App icon (512×512 PNG) | `mobile/store/once-512.png` |
 | Feature graphic (1024×500 PNG) | `mobile/store/play-feature-graphic.png` |
-| Phone screenshot 1 — one person at a time | `mobile/store/google/screenshot-1-one-person.png` |
-| Phone screenshot 2 — sending an invitation | `mobile/store/google/screenshot-2-invite.png` |
-| Phone screenshot 3 — ten minutes, the clock running | `mobile/store/google/screenshot-3-timer.png` |
-| Phone screenshot 4 — an invitation that arrived | `mobile/store/google/screenshot-4-incoming.png` |
-| Phone screenshot 5 — friends and shared circles | `mobile/store/google/screenshot-5-circles.png` |
-| Phone screenshot 6 — the conversation it ends in | `mobile/store/google/screenshot-6-chat.png` |
+| Phone screenshot 1 — one person at a time | `mobile/store/google/he/screenshot-1-one-person.png` |
+| Phone screenshot 2 — sending an invitation | `mobile/store/google/he/screenshot-2-invite.png` |
+| Phone screenshot 3 — ten minutes, the clock running | `mobile/store/google/he/screenshot-3-timer.png` |
+| Phone screenshot 4 — an invitation that arrived | `mobile/store/google/he/screenshot-4-incoming.png` |
+| Phone screenshot 5 — friends and shared circles | `mobile/store/google/he/screenshot-5-circles.png` |
+| Phone screenshot 6 — the conversation it ends in | `mobile/store/google/he/screenshot-6-chat.png` |
 
-The same six frames exist per store, each **drawn** at that store's size (never an
-upscale of the other):
+FOUR SETS of those six frames, one per store × language — each **drawn** at that
+store's size, never an upscale of the other:
 
 | Folder | Size | Where it goes |
 |---|---|---|
-| `mobile/store/google/` | 1080×1920 (9:16) | Play Console phone screenshots (accepts 320–3840 px per side) |
-| `mobile/store/apple/` | 1284×2778 | App Store Connect, 6.5"/6.7" portrait |
+| `mobile/store/google/he/` | 1080×1920 | Play Console phone screenshots, Hebrew listing (he-IL, the default) |
+| `mobile/store/google/en/` | 1080×1920 | Play Console phone screenshots, English translation (en-US) |
+| `mobile/store/apple/he/` | 1284×2778 | App Store Connect 6.5"/6.7" portrait, Hebrew |
+| `mobile/store/apple/en/` | 1284×2778 | App Store Connect 6.5"/6.7" portrait, English |
 
-App Store Connect accepts 1242×2688, 2688×1242, 1284×2778 or 2778×1284 for these
-sizes; the portrait 1284×2778 set here is the one to upload.
+Play accepts 320–3840 px per side; App Store Connect accepts 1242×2688, 2688×1242,
+1284×2778 or 2778×1284 for these sizes, and the portrait 1284×2778 set here is the one
+to upload.
 
-Each screenshot is a Hebrew headline over a phone whose screen is a **real capture off
-the running app** (user directive 2026-08-02), not a drawing of it. The captures live
-in [shots/](shots/) and were taken on `emulator-5554` at 1080×2400 with the app in
-Hebrew; the generator only draws the frame around them. Three of the six are a popup
-standing open, because that is where the app says what it has to say — the message,
-what it costs and the one thing to do about it.
+Each screenshot is a headline over a phone whose screen is a **real capture off the
+running app** (user directive 2026-08-02), not a drawing of it. The captures live in
+[shots/he/](shots/he/) and [shots/en/](shots/en/) — the app was run in each language,
+so the English set is a genuinely English app (LTR, and heights in feet) rather than
+the Hebrew one relabelled. They were taken on `emulator-5554` at 1080×2400, at the
+device's own density and font scale, and the generator only draws the frame around
+them. The capture goes in **untouched, its own Android status bar included** (user
+directive 2026-08-02, after an iPhone status bar was drawn over it and turned down):
+do not edit that strip.
+
+Three of the six are a popup standing open, because that is where the app says what it
+has to say — the message, what it costs and the one thing to do about it.
 
 The demo state behind the captures is on the **test partition** (`is_test = true`) and
 was shaped so what the screens show is rich and true: the candidate stands at the
 viewer's own point, so the proximity row reads "כאן ועכשיו" rather than a distance in
-kilometres; she shares three circles and two mutual friends with him; her height,
-smoking, kids' ages and a free weekend are all filled in; and every name and bio in the
-partition is Hebrew.
+kilometres; she shares three circles and two mutual friends with him; and her height,
+smoking, kids' ages and a free weekend are all filled in. Every name, bio and group
+name in the partition is written in the language being captured — it was flipped to
+English for that set and back afterwards.
 
 ---
 
@@ -146,9 +156,9 @@ Once is a different way to meet. Worth trying.
 4. **Graphics:**
    - App icon → upload `mobile/store/once-512.png`.
    - Feature graphic → upload `mobile/store/play-feature-graphic.png`.
-   - Phone screenshots → upload all four `google/screenshot-*.png` files in order (1 → 4).
+   - Phone screenshots → upload all six `google/he/screenshot-*.png` files in order (1 → 6).
 5. Save → Play Console requires the page to pass validation before you can submit the change for review.
-6. After saving the Hebrew listing, click **Manage translations → Add your own translations**, pick *English (United States)*, and paste the English copy + reuse the same graphics.
+6. After saving the Hebrew listing, click **Manage translations → Add your own translations**, pick *English (United States)*, paste the English copy, and upload the **`google/en/`** screenshots (the icon and feature graphic are shared).
 
 ---
 
@@ -156,9 +166,10 @@ Once is a different way to meet. Worth trying.
 
 Both generators are checked in:
 
-- `node mobile/store/make-screenshots.mjs` → produces all 6 `screenshot-*.png` in
-  **both** `google/` (1080×1920) and `apple/` (1284×2778) from the captures in
-  `shots/`. The frame is authored in a 1080-wide design space: the headline block and
+- `node mobile/store/make-screenshots.mjs` → produces all 6 `screenshot-*.png` in each
+  of the four sets — `google/{he,en}` (1080×1920) and `apple/{he,en}` (1284×2778) —
+  from the captures in `shots/{he,en}`. `--only <store>:<lang>:<n>` renders a single
+  frame, for a look before the whole set is drawn. The frame is authored in a 1080-wide design space: the headline block and
   margins scale with the frame width, and the phone takes the height that is left,
   keeping the CAPTURE's own aspect so no pixel of the screen is cropped or stretched.
   Adding a store size is one entry in `TARGETS` at the top of that file.

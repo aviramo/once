@@ -14,7 +14,7 @@
 // Circles reuse the existing groups machinery; "my friends" is the derived
 // friend-links set. See CLAUDE.md + project memory.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Share, Keyboard, Linking, FlatList, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
+import { View, StyleSheet, Pressable, TouchableWithoutFeedback, Keyboard, Linking, FlatList, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native'
 import { Path, Circle, Line } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useBottomInset } from '../hooks/useBottomInset'
@@ -53,6 +53,7 @@ import { SharedCirclesPopup, useSharedCircles } from './SharedListPopup'
 import type { MetaPart } from '../lib/meta'
 import { rosters, joinRequests, friendsRoster, dropGroupCaches } from '../lib/rosterCache'
 import { shareFriendInvite } from '../lib/referral'
+import { shareInvitation } from '../lib/share'
 import { REFERRAL_REWARD } from '../lib/credits'
 import { groupInviteUrl } from '../lib/links'
 import { EditableText } from './EditableText'
@@ -1227,7 +1228,7 @@ export function GroupSheet({ group, status = 'joined', onClose, onClosed, onJoin
   const share = () => {
     if (!group?.invite_code) return
     tap()
-    Share.share({ message: t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) })
+    shareInvitation(t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)))
   }
   // The one terminal action this popup carries, whichever group it is about and
   // whatever I am to it: leaving, taking the request back, or clearing the
@@ -2074,7 +2075,7 @@ function OwnedGroupView({ group, initialRequestsOpen, search, onOpenRequest, onO
     }
   }, [group.id, applyRequests, applyMembers, load])
 
-  const share = () => { tap(); Share.share({ message: t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code)) }) }
+  const share = () => { tap(); shareInvitation(t('circles.shareMessage').replace('{name}', group.name).replace('{link}', groupInviteUrl(group.invite_code))) }
 
   // Reading the group back as everyone else meets it — the quiet half of the
   // page's foot. Every field the popup shows is already on this group row, which
