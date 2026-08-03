@@ -1,13 +1,25 @@
 # What EAS leaves OUT of the archive it uploads to build.
 #
-# THIS FILE BELONGS AT THE REPO ROOT, not in mobile/. The Expo project is
-# mobile/, but the archive is rooted where git is — here — so a .easignore
-# under mobile/ does not govern it.
+# THIS FILE BELONGS AT THE REPO ROOT. The Expo project is mobile/, but the
+# archive is rooted where git is — here — so a .easignore under mobile/ does
+# not govern it.
 #
-# CAREFUL: when this file exists, EAS uses it INSTEAD OF .gitignore, not on top
-# of it. Everything .gitignore says has to be repeated, or node_modules, the
-# generated native folders and the secrets below all get uploaded. Keep the two
-# in step; the only intended difference is the `mobile/store/` block at the end.
+# AND IT REPLACES .gitignore ENTIRELY — not just the root one, but the nested
+# mobile/.gitignore, web/.gitignore and supabase/.gitignore too. Nothing those
+# say applies here unless it is repeated. That is how web/.next/ — 288 MB of
+# turbopack dev cache, ignored only by web/.gitignore — ended up in a 230 MB
+# upload whose mobile app was 3.7 MB of it.
+#
+# So this file does not try to mirror three nested ignore files that will
+# drift. It excludes the sibling projects WHOLESALE: an Android build reads
+# mobile/ and nothing else in this repo.
+
+# ── Sibling projects an Android build never reads ──────────────────────────
+# Excluded whole rather than by their build artifacts, so a new cache dir in
+# any of them can never silently rejoin the upload.
+/web/
+/supabase/
+/docs/
 
 # ── Secrets / env ──────────────────────────────────────────────────────────
 .env
@@ -22,11 +34,26 @@
 *.mobileprovision
 *.keystore
 
+# credentials.json holds the keystore and key PASSWORDS in plaintext. A cloud
+# build must never receive them: EAS holds the keystore server-side and signs
+# there. (*.jks above covers the keystore file itself.)
+mobile/credentials.json
+mobile/credentials/
+
+# .claude/ holds .claude/secrets/google-play.json, the Play service account
+# key. It must never reach a build machine.
+.claude/
+.mcp.json
+.agents/
+skills-lock.json
+.vercel
+
 # ── Node ───────────────────────────────────────────────────────────────────
 node_modules/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+.pnpm-debug.log*
 
 # ── Expo / React Native ────────────────────────────────────────────────────
 .expo/
@@ -34,28 +61,33 @@ dist/
 web-build/
 expo-env.d.ts
 .metro-health-check*
+.kotlin/
 
 # Generated native folders. EAS runs its own prebuild; shipping a populated
-# android/ would make it build the locally-generated project instead.
+# android/ makes it build the locally-generated project instead — including a
+# local signing config whose gradle properties exist only on that machine.
 /mobile/ios/
 /mobile/android/
+mobile/modules/*/android/build/
+mobile/modules/*/android/.gradle/
+
+# Build caches, wherever they appear. Redundant with the wholesale exclusions
+# above; kept so a future workspace at the root does not repeat the .next/
+# mistake.
+.next/
+.turbo/
+coverage/
+/out/
 
 # ── TypeScript ─────────────────────────────────────────────────────────────
 *.tsbuildinfo
-
-# ── Supabase local dev ─────────────────────────────────────────────────────
-supabase/.branches/
-supabase/.temp/
-supabase/test/
+next-env.d.ts
 
 # ── Build artifacts / logs ─────────────────────────────────────────────────
 *.apk
 *.aab
 *.ipa
 *.log
-
-# ── Store pack ─────────────────────────────────────────────────────────────
-mobile/store/apple-review/
 
 # ── Editor / OS ────────────────────────────────────────────────────────────
 .DS_Store
@@ -64,25 +96,12 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ── Claude / assistant metadata ────────────────────────────────────────────
-# .claude/ holds .claude/secrets/google-play.json, the Play service account
-# key. It must never reach a build machine.
-.claude/
-.mcp.json
-.agents/
-skills-lock.json
-
-.vercel
-.env*
-
-# ── Signing credentials pulled down with `eas credentials` ─────────────────
-# credentials.json holds the keystore and key PASSWORDS in plaintext. A cloud
-# build must never receive them: EAS holds the keystore server-side and signs
-# with it there. (*.jks above already covers the keystore itself.)
-mobile/credentials.json
-mobile/credentials/
-
-# ── The only thing this file adds over .gitignore ──────────────────────────
-# Store listing artwork and screenshot sources: tracked in git (real work), but
-# no build reads them, and they are ~79 MB of the upload.
+# ── Store pack ─────────────────────────────────────────────────────────────
+# Listing artwork and screenshot sources: tracked in git (real work), but no
+# build reads them. apple-review/ is not in git at all — real screens of a live
+# account, family photos included.
 mobile/store/
+
+# ── Project prose ──────────────────────────────────────────────────────────
+*.md
+!mobile/**/*.md
