@@ -31,8 +31,24 @@ const P_STORE_PASSWORD = PREFIX + 'STORE_PASSWORD'
 const P_KEY_ALIAS = PREFIX + 'KEY_ALIAS'
 const P_KEY_PASSWORD = PREFIX + 'KEY_PASSWORD'
 
-/** The keystore block from credentials.json, or null when there is none. */
+/**
+ * The keystore block from credentials.json, or null when this build should not
+ * touch signing at all.
+ *
+ * NEVER THROWS. This runs inside `expo config`, so anything thrown here fails
+ * the whole build before it starts — which is exactly what happened on EAS:
+ * credentials.json reached the build machine while the .jks did not (ignore
+ * rules matched *.jks but not the json), and a hard error on that mismatch
+ * killed a production build. A local build that ends up unsigned is a mistake
+ * the developer sees immediately; a cloud build that cannot start is an outage.
+ */
 function readLocalKeystore(projectRoot) {
+  // On EAS the keystore lives server-side and EAS injects its own signing, so
+  // there is nothing for this plugin to do — whatever files happen to be in the
+  // uploaded archive. This is the guard that actually matters; the file checks
+  // below are for the local case.
+  if (process.env.EAS_BUILD === 'true') return null
+
   const file = path.join(projectRoot, 'credentials.json')
   if (!fs.existsSync(file)) return null
 
@@ -40,7 +56,8 @@ function readLocalKeystore(projectRoot) {
   try {
     parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
   } catch (e) {
-    throw new Error(`[withUploadSigning] credentials.json is not valid JSON: ${e.message}`)
+    console.warn(`[withUploadSigning] ignoring credentials.json — not valid JSON: ${e.message}`)
+    return null
   }
 
   const ks = parsed?.android?.keystore
@@ -49,20 +66,21 @@ function readLocalKeystore(projectRoot) {
   const missing = ['keystorePath', 'keystorePassword', 'keyAlias', 'keyPassword']
     .filter((k) => !ks[k])
   if (missing.length) {
-    throw new Error(
-      `[withUploadSigning] credentials.json is missing: ${missing.join(', ')}. ` +
-      're-download it with `npx eas credentials`.',
+    console.warn(
+      `[withUploadSigning] ignoring credentials.json — missing ${missing.join(', ')}. ` +
+      'Re-download it with `npx eas credentials` if this is a local release build.',
     )
+    return null
   }
 
-  // Half a downloaded credential set is worse than none: it would sign with a
-  // keystore that is not the upload key and only fail at the Play upload.
   const abs = path.join(projectRoot, ks.keystorePath)
   if (!fs.existsSync(abs)) {
-    throw new Error(
-      `[withUploadSigning] credentials.json points at ${ks.keystorePath}, which does not exist. ` +
-      're-download it with `npx eas credentials`.',
+    console.warn(
+      `[withUploadSigning] ignoring credentials.json — it points at ${ks.keystorePath}, ` +
+      'which does not exist. Re-download it with `npx eas credentials` if this is a ' +
+      'local release build.',
     )
+    return null
   }
 
   // gradle's file() inside android/app/build.gradle resolves relative to
