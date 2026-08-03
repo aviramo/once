@@ -47,13 +47,32 @@ update storage.buckets set public = false where id = 'users';
 2. להתקין את טריגר ההקרנה, כך ש-`relations.page1/page2` נכתבים רק על ידי `_watch_pages`
 3. למחוק: את שני המפתחות מ-`relations`, את `users_watch_sync` / `_watch_sync` / `_watch_sync_tg` / `app_refresh_snapshots`, את ~40 הקבועים ב-`mobile/app/home.tsx`, את `deriveCompat` ב-`userStore.ts`, ואת פסקאות page1/page2 מ-`CLAUDE.md`
 
+**כמה באמת נשאר (נמדד 3.8.2026):** צעד 1 כמעט גמור. 21 מתוך 26 הכותבים כבר קוראים ל-`_watch_project`, והיחידים שעדיין כותבים `relations` **בלי** להקרין הם **שלוש פונקציות אדמין**: `app_admin_reset` (שתי החתימות) ו-`app_admin_reset_user`. כל שאר הכותבים במשחק כבר עברו. `app_ignore` לא כותב `relations` בכלל ונשען על הטריגר — תקין.
+
+כלומר העבודה האמיתית שנשארה היא **צעד 2**, ולפניו שלוש פונקציות אדמין. לא כפי שהערכתי מהתיאור לבדו.
+
+**איך למדוד את זה שוב** (במקום להאמין לשורה הזו):
+```sql
+select p.proname,
+  (pg_get_functiondef(p.oid) ~* 'update\s+public\.users[^;]*relations') writes_relations,
+  (pg_get_functiondef(p.oid) like '%_watch_project%') calls_project
+from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+where n.nspname='public' and p.prokind='f' and p.proname like 'app\_%'
+  and pg_get_functiondef(p.oid) ~* 'update\s+public\.users[^;]*relations'
+order by calls_project, 1;
+```
+
 **זו המטרה המוצהרת שלך:** page1/page2 צריכים להיעלם מהאפליקציה לגמרי, כולל מאוצר המילים.
 
 ---
 
-## 💡 שווה לצרף: שני הפריטים למעלה לאותו בילד
+## 💡 החלטה: שני הפריטים למעלה נכנסים לאותו בילד
 
-לשניהם אין עדיין בילד. אם **שינויי התמונות והקריאה מ-`watch` ייכנסו לאותו בילד**, ההמתנה אחת משרתת את שתיהן במקום שתי המתנות מדורגות. אחרת תחכה פעמיים לאותו דבר.
+**הוחלט 3.8.2026.** לשניהם לא היה בילד, אז **חתימת התמונות והקריאה מ-`watch` נכנסות יחד** — המתנה אחת משרתת את שתי ההסרות במקום שתי המתנות מדורגות.
+
+**המשמעות המעשית:** אין טעם לבנות עד ששניהם בפנים. בילד שנשלח עם רק אחד מהם מבזבז את ההמתנה, ומאלץ המתנה שנייה על השני.
+
+**סדר העבודה:** קודם ה-`watch`, אחר כך התמונות. שניהם נוגעים ב-`home.tsx` וב-`MatchCard`, ומעבר ה-`watch` הוא זה שמשנה את *צורת* הנתון שנושא את התמונות — אז בסדר ההפוך היינו נוגעים באותו קוד פעמיים.
 
 ---
 
