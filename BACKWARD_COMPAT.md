@@ -4,6 +4,8 @@ Tracks server-side shims kept alive only to support older published mobile build
 
 See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (production)" for the staging pattern (Expand → Migrate → Contract). Entries here are the **Contract** step waiting to happen.
 
+> **`docs/WHEN_EVERYONE_HAS_UPDATED.md` is the Hebrew checklist of everything in here that is waiting on a version floor**, written to be read cold without remembering any of it. Add to both in the same change; delete from both in the same commit. If they disagree, THIS file is right and that one was forgotten.
+
 ## How to use this file
 
 - **When you ship the Expand step** of a breaking change, add an entry here in the same change. If you don't, the cleanup will never happen.
