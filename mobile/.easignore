@@ -1,0 +1,15 @@
+# Files/dirs the EAS build ignores when packing the project archive.
+# Same shape as .gitignore. Only affects what gets uploaded to EAS; the git
+# repo and local dev tree are untouched.
+#
+# EVERYTHING that isn't runtime lives under mobile/store/ (Play/App Store
+# screenshots, capcut stills, review videos, debug drops from adb screencap
+# and the like). Keep it one line here — one place to look, one place to add
+# to. If a new non-runtime folder shows up under mobile/, move it into store/
+# rather than adding a new rule.
+store/
+
+# Local caches — Expo's own build/dev output, never part of the shipped app.
+.expo/
+dist/
+web-build/

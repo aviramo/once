@@ -18,6 +18,12 @@ expo-env.d.ts
 *.key
 *.mobileprovision
 
+# Signing credentials pulled down with `eas credentials`. The .jks is already
+# covered above, but credentials.json holds the keystore + key PASSWORDS in
+# plaintext, so it must never be committed.
+credentials.json
+credentials/
+
 # Metro
 .metro-health-check*
 
