@@ -1,0 +1,646 @@
+{
+  "users": {
+    "maya0": {
+      "uid": "9d75bf60-d7b8-4bb5-9698-247602524d7f",
+      "name": "Maya",
+      "done": true,
+      "shots": 6
+    },
+    "daniel1": {
+      "uid": "e3b94e13-a55c-41a4-84da-8148e4e0baf3",
+      "name": "Daniel",
+      "done": true,
+      "shots": 6
+    },
+    "priya2": {
+      "uid": "510a0c6f-771b-4156-a269-5f34fb57ada2",
+      "name": "Priya",
+      "done": true,
+      "shots": 6
+    },
+    "marcus3": {
+      "uid": "0ca70b38-a289-49b6-a904-4eb9602d9a0a",
+      "name": "Marcus",
+      "done": true,
+      "shots": 6
+    },
+    "elena4": {
+      "uid": "d6a991c2-c952-430f-98aa-f8f5a1019043",
+      "name": "Elena",
+      "done": true,
+      "shots": 3
+    },
+    "tom5": {
+      "uid": "f148b5eb-9a20-4fde-97e7-f51d485155b4",
+      "name": "Tom",
+      "done": true,
+      "shots": 4
+    },
+    "aisha6": {
+      "uid": "cd830dc0-1f7f-4d2f-9121-cca1bb91a608",
+      "name": "Aisha",
+      "done": true,
+      "shots": 5
+    },
+    "jonah7": {
+      "uid": "582648b5-2725-49da-aa3b-e096d230a2e3",
+      "name": "Jonah",
+      "done": true,
+      "shots": 4
+    },
+    "clara8": {
+      "uid": "0527d9bb-b681-406f-8245-0c7e1e9bdfb9",
+      "name": "Clara",
+      "done": true,
+      "shots": 3
+    },
+    "victor9": {
+      "uid": "828550ba-d481-4de2-9505-8e14fd2e63d5",
+      "name": "Victor",
+      "done": true,
+      "shots": 4
+    },
+    "nina10": {
+      "uid": "dd611256-b443-4fac-8321-01873ee7f052",
+      "name": "Nina",
+      "done": true,
+      "shots": 2
+    },
+    "owen11": {
+      "uid": "c3906358-3ce0-4d7e-a7ee-0c1d91d35e7b",
+      "name": "Owen",
+      "done": true,
+      "shots": 6
+    },
+    "sofia12": {
+      "uid": "e8f2b187-e8bc-431e-855d-de9582c546e1",
+      "name": "Sofia",
+      "done": true,
+      "shots": 2
+    },
+    "ravi13": {
+      "uid": "26c75d81-7884-40dc-9a7f-39c3bb73447c",
+      "name": "Ravi",
+      "done": true,
+      "shots": 2
+    },
+    "grace14": {
+      "uid": "a0bbc286-5283-474b-9022-c0571f932f3d",
+      "name": "Grace",
+      "done": true,
+      "shots": 4
+    },
+    "leo15": {
+      "uid": "eb5113ac-01d0-48b1-bcb6-872fa9b738c1",
+      "name": "Leo",
+      "done": true,
+      "shots": 6
+    },
+    "hannah16": {
+      "uid": "80842ade-4fd5-4d21-adf4-1a404dbaaf42",
+      "name": "Hannah",
+      "done": true,
+      "shots": 5
+    },
+    "andre17": {
+      "uid": "c20edbc9-09f5-4df4-ae54-26898b917a7d",
+      "name": "Andre",
+      "done": true,
+      "shots": 2
+    },
+    "julia18": {
+      "uid": "cc178810-77d4-47f6-85c9-717eedb9ee0b",
+      "name": "Julia",
+      "done": true,
+      "shots": 5
+    },
+    "ben19": {
+      "uid": "aa626b3d-db9d-41f6-87db-8e23753c2546",
+      "name": "Ben",
+      "done": true,
+      "shots": 5
+    },
+    "rosa20": {
+      "uid": "dbecdaa8-3e63-44d6-bd87-4681950564df",
+      "name": "Rosa",
+      "done": true,
+      "shots": 2
+    },
+    "chris21": {
+      "uid": "38985d99-3714-4cd2-8064-e12db9b0e58a",
+      "name": "Chris",
+      "done": true,
+      "shots": 5
+    },
+    "yuki22": {
+      "uid": "f79abd26-fc06-4ab4-8e0a-853ac09ed459",
+      "name": "Yuki",
+      "done": true,
+      "shots": 3
+    },
+    "samuel23": {
+      "uid": "74e67278-91d4-4f44-9606-c86dc2e432fd",
+      "name": "Samuel",
+      "done": true,
+      "shots": 4
+    },
+    "isabel24": {
+      "uid": "c12ad5c2-ba4d-425e-9ad2-099eee86626b",
+      "name": "Isabel",
+      "done": true,
+      "shots": 6
+    },
+    "felix25": {
+      "uid": "6a1949dd-5ef4-40b4-bb27-d655d480698e",
+      "name": "Felix",
+      "done": true,
+      "shots": 4
+    },
+    "amara26": {
+      "uid": "4720db97-cea0-48c0-bf17-d3cf19d39365",
+      "name": "Amara",
+      "done": true,
+      "shots": 2
+    },
+    "peter27": {
+      "uid": "41c7e866-1b0a-4019-b199-08e77fa41f1e",
+      "name": "Peter",
+      "done": true,
+      "shots": 5
+    },
+    "layla28": {
+      "uid": "497769a7-8e51-4a3d-88a3-e95bb9d8a7f4",
+      "name": "Layla",
+      "done": true,
+      "shots": 4
+    },
+    "nathan29": {
+      "uid": "1f234dbc-117c-44b0-a72a-c16e6b07fec1",
+      "name": "Nathan",
+      "done": true,
+      "shots": 2
+    },
+    "mei30": {
+      "uid": "53bbe021-a6a5-4095-9596-f765c0af0c17",
+      "name": "Mei",
+      "done": true,
+      "shots": 4
+    },
+    "gabriel31": {
+      "uid": "e039a73a-93b6-47c0-812e-5bcd83e041c9",
+      "name": "Gabriel",
+      "done": true,
+      "shots": 4
+    },
+    "dana32": {
+      "uid": "e9b21186-3e07-4b4e-8e81-2d574c1a8103",
+      "name": "Dana",
+      "done": true,
+      "shots": 3
+    },
+    "ethan33": {
+      "uid": "049f7272-36f1-41e9-a4b5-8b7be7c2bd5e",
+      "name": "Ethan",
+      "done": true,
+      "shots": 3
+    },
+    "naomi34": {
+      "uid": "0ffbe0b9-75e1-4488-aa82-991aae2c57b3",
+      "name": "Naomi",
+      "done": true,
+      "shots": 6
+    },
+    "ali35": {
+      "uid": "fcc1a9fa-f356-41f2-9929-11ba13a60f09",
+      "name": "Ali",
+      "done": true,
+      "shots": 6
+    },
+    "tessa36": {
+      "uid": "9db024ee-2f59-4337-8d83-f00b6d4ab562",
+      "name": "Tessa",
+      "done": true,
+      "shots": 6
+    },
+    "hugo37": {
+      "uid": "f0793f2a-9926-45d6-ae4f-b2d7a375ec04",
+      "name": "Hugo",
+      "done": true,
+      "shots": 5
+    },
+    "camille38": {
+      "uid": "b1352e13-34fc-4837-8dc4-6ee42c1258fa",
+      "name": "Camille",
+      "done": true,
+      "shots": 4
+    },
+    "ivan39": {
+      "uid": "574300c2-7c22-4b4e-bef7-3277c6c36745",
+      "name": "Ivan",
+      "done": true,
+      "shots": 2
+    },
+    "simone40": {
+      "uid": "109e4713-9513-414d-b9e0-88a21294389e",
+      "name": "Simone",
+      "done": true,
+      "shots": 6
+    },
+    "robert41": {
+      "uid": "ff3ca942-f2cc-45f8-9fc1-b6822964f1ec",
+      "name": "Robert",
+      "done": true,
+      "shots": 3
+    },
+    "farida42": {
+      "uid": "ad475189-e0bd-4305-999d-1c366bbcab1d",
+      "name": "Farida",
+      "done": true,
+      "shots": 6
+    },
+    "jack43": {
+      "uid": "5a5c9482-6194-4d17-b0c9-5762c9d77eff",
+      "name": "Jack",
+      "done": true,
+      "shots": 6
+    },
+    "lucia44": {
+      "uid": "e70207a8-82fb-4194-affb-3efe203c679b",
+      "name": "Lucia",
+      "done": true,
+      "shots": 6
+    },
+    "aaron45": {
+      "uid": "ce1c70e9-7978-4aca-b810-435f01ba16a5",
+      "name": "Aaron",
+      "done": true,
+      "shots": 4
+    },
+    "ingrid46": {
+      "uid": "7e2011bb-357e-4318-ae9d-96971d86093c",
+      "name": "Ingrid",
+      "done": true,
+      "shots": 2
+    },
+    "diego47": {
+      "uid": "2803c69e-531d-4bb1-aafa-d520d04bf9be",
+      "name": "Diego",
+      "done": true,
+      "shots": 6
+    },
+    "beatrice48": {
+      "uid": "f5a684d1-3578-4299-802a-33708c1202ab",
+      "name": "Beatrice",
+      "done": true,
+      "shots": 5
+    },
+    "karl49": {
+      "uid": "2b834d07-f049-4dd2-a81c-829a10d4147c",
+      "name": "Karl",
+      "done": true,
+      "shots": 2
+    },
+    "anya50": {
+      "uid": "15f247fe-ac5b-4260-a6e9-ae8efe068aff",
+      "name": "Anya",
+      "done": true,
+      "shots": 6
+    },
+    "miles51": {
+      "uid": "e28ef368-c1f2-46e0-80e2-607aa5675adc",
+      "name": "Miles",
+      "done": true,
+      "shots": 5
+    },
+    "ruth52": {
+      "uid": "6538d263-ea82-4e03-ad58-44634b5076c0",
+      "name": "Ruth",
+      "done": true,
+      "shots": 4
+    },
+    "emil53": {
+      "uid": "a0b32b23-d1d2-46ca-8e34-b7bf9eb913c5",
+      "name": "Emil",
+      "done": true,
+      "shots": 5
+    },
+    "talia54": {
+      "uid": "2911917f-060c-41d8-8c5a-205a4fcc7a28",
+      "name": "Talia",
+      "done": true,
+      "shots": 3
+    },
+    "gregor55": {
+      "uid": "46b4374b-914e-438c-928a-3d3d1d30c8d7",
+      "name": "Gregor",
+      "done": true,
+      "shots": 3
+    },
+    "paloma56": {
+      "uid": "7386eb3d-b847-4791-996b-aa7a41245bd1",
+      "name": "Paloma",
+      "done": true,
+      "shots": 6
+    },
+    "adrian57": {
+      "uid": "2b8fc684-a482-46bb-ac71-3e4a059d4362",
+      "name": "Adrian",
+      "done": true,
+      "shots": 2
+    },
+    "bianca58": {
+      "uid": "f7436c62-9873-4498-a6bc-b418a1017136",
+      "name": "Bianca",
+      "done": true,
+      "shots": 6
+    },
+    "nils59": {
+      "uid": "1c1f0492-5a65-44c4-bf4a-3099e322bd1c",
+      "name": "Nils",
+      "done": true,
+      "shots": 5
+    },
+    "zara60": {
+      "uid": "52b674d6-c854-47c6-895b-91d92f2122ef",
+      "name": "Zara",
+      "done": true,
+      "shots": 3
+    },
+    "vincent61": {
+      "uid": "65858b86-602b-4d00-8bd0-a4a180df8a35",
+      "name": "Vincent",
+      "done": true,
+      "shots": 3
+    },
+    "delia62": {
+      "uid": "144598cb-a65a-4ac9-b967-1f66da73c877",
+      "name": "Delia",
+      "done": true,
+      "shots": 3
+    },
+    "omar63": {
+      "uid": "b223a1ec-3cff-4242-add5-41024c2b1a2f",
+      "name": "Omar",
+      "done": true,
+      "shots": 6
+    },
+    "petra64": {
+      "uid": "a1d04922-91ce-4cde-8faf-836e08e56b93",
+      "name": "Petra",
+      "done": true,
+      "shots": 5
+    },
+    "louis65": {
+      "uid": "0fb8d958-8527-4c67-a8ab-d981151d2639",
+      "name": "Louis",
+      "done": true,
+      "shots": 3
+    },
+    "freya66": {
+      "uid": "53371d76-cc7b-4c74-a916-121410b76dd0",
+      "name": "Freya",
+      "done": true,
+      "shots": 2
+    },
+    "malik67": {
+      "uid": "b6373734-b3f0-40cc-bcc9-5c48f18fb2bc",
+      "name": "Malik",
+      "done": true,
+      "shots": 4
+    },
+    "sana68": {
+      "uid": "e48ec1e4-0a90-4746-b384-476e8436feb9",
+      "name": "Sana",
+      "done": true,
+      "shots": 2
+    },
+    "theo69": {
+      "uid": "6edc6461-6220-498e-9ce3-71a0b4503bf6",
+      "name": "Theo",
+      "done": true,
+      "shots": 5
+    },
+    "renata70": {
+      "uid": "9b9bcbda-2e5e-441d-9937-c74d39823973",
+      "name": "Renata",
+      "done": true,
+      "shots": 5
+    },
+    "sebastian71": {
+      "uid": "31c95593-8b25-406f-ba59-98b491a087bd",
+      "name": "Sebastian",
+      "done": true,
+      "shots": 2
+    },
+    "nadia72": {
+      "uid": "c44531f7-9b89-4e03-8833-0bd4f8a1a688",
+      "name": "Nadia",
+      "done": true,
+      "shots": 4
+    },
+    "colin73": {
+      "uid": "51f86adf-0251-4cb8-aa38-ecbb210edf4a",
+      "name": "Colin",
+      "done": true,
+      "shots": 5
+    },
+    "amelie74": {
+      "uid": "583f3ebc-138d-4c37-8ced-ccb1ad0c846e",
+      "name": "Amelie",
+      "done": true,
+      "shots": 6
+    },
+    "hector75": {
+      "uid": "a11bc59e-e81b-49e1-931b-1202607555e5",
+      "name": "Hector",
+      "done": true,
+      "shots": 4
+    },
+    "wren76": {
+      "uid": "961819c3-07e4-4af8-a148-4f6dbf920ca7",
+      "name": "Wren",
+      "done": true,
+      "shots": 2
+    },
+    "bruno77": {
+      "uid": "9fbef6f5-b124-4d05-bf99-e01db6728688",
+      "name": "Bruno",
+      "done": true,
+      "shots": 3
+    },
+    "iris78": {
+      "uid": "d034086c-1dc5-413d-9381-d835e52b56b7",
+      "name": "Iris",
+      "done": true,
+      "shots": 4
+    },
+    "nikhil79": {
+      "uid": "68991bc0-eadf-4a9b-86c3-c1266ce45c5d",
+      "name": "Nikhil",
+      "done": true,
+      "shots": 3
+    },
+    "cleo80": {
+      "uid": "63cc132e-fc73-4a7f-b9bc-5eedf5d5d0c7",
+      "name": "Cleo",
+      "done": true,
+      "shots": 4
+    },
+    "lars81": {
+      "uid": "1fd23e3d-dd50-4474-87a7-2d77b09c8635",
+      "name": "Lars",
+      "done": true,
+      "shots": 2
+    },
+    "vera82": {
+      "uid": "2448a924-6635-4c9e-9c92-0f7d7adfc29a",
+      "name": "Vera",
+      "done": true,
+      "shots": 3
+    },
+    "idris83": {
+      "uid": "1db4d7d1-5487-4429-ba82-3f729f26bf36",
+      "name": "Idris",
+      "done": true,
+      "shots": 3
+    },
+    "margot84": {
+      "uid": "89d26edc-447a-4ef0-a212-55fb73507876",
+      "name": "Margot",
+      "done": true,
+      "shots": 6
+    },
+    "pablo85": {
+      "uid": "d18071b6-8a6b-4ab5-b19f-8fd46b0b7b00",
+      "name": "Pablo",
+      "done": true,
+      "shots": 2
+    },
+    "gita86": {
+      "uid": "2e4c8e4c-261b-4af9-b65a-c43551bc5109",
+      "name": "Gita",
+      "done": true,
+      "shots": 5
+    },
+    "anton87": {
+      "uid": "f95a092f-0ee5-43b1-8306-65ecec47bd2a",
+      "name": "Anton",
+      "done": true,
+      "shots": 3
+    },
+    "rosalind88": {
+      "uid": "2568f6bf-fe0f-4932-b014-ef9204d22bc5",
+      "name": "Rosalind",
+      "done": true,
+      "shots": 3
+    },
+    "elias89": {
+      "uid": "3307c74e-f029-440f-bc0a-de8c9b49df07",
+      "name": "Elias",
+      "done": true,
+      "shots": 6
+    },
+    "suri90": {
+      "uid": "333437b1-3063-4b1e-a71c-41eb35f0d436",
+      "name": "Suri",
+      "done": true,
+      "shots": 2
+    },
+    "joaquin91": {
+      "uid": "4ea04b79-ba50-4664-a0f9-dd04936b8e13",
+      "name": "Joaquin",
+      "done": true,
+      "shots": 4
+    },
+    "edith92": {
+      "uid": "de9d10e7-a21d-4fe1-b658-18529e57c0de",
+      "name": "Edith",
+      "done": true,
+      "shots": 3
+    },
+    "rami93": {
+      "uid": "ebc1b75b-70e0-4fd8-b365-e5250416d956",
+      "name": "Rami",
+      "done": true,
+      "shots": 5
+    },
+    "lena94": {
+      "uid": "ef0dbcc4-f3c5-4c85-9323-cad3a713ac5a",
+      "name": "Lena",
+      "done": true,
+      "shots": 2
+    },
+    "casper95": {
+      "uid": "623cefc8-0e5f-46b4-bad9-ff7ead0a3ce0",
+      "name": "Casper",
+      "done": true,
+      "shots": 5
+    },
+    "alma96": {
+      "uid": "792a4c6c-5e0e-4c9c-b7b3-b3abea48b8c0",
+      "name": "Alma",
+      "done": true,
+      "shots": 2
+    },
+    "tobias97": {
+      "uid": "2631a7a9-8634-4d7e-ab94-044a284235e9",
+      "name": "Tobias",
+      "done": true,
+      "shots": 5
+    },
+    "ines98": {
+      "uid": "fedaaafe-20f3-420e-8a57-01744cebcc46",
+      "name": "Ines",
+      "done": true,
+      "shots": 4
+    },
+    "gordon99": {
+      "uid": "2509f65d-36f0-4b92-ae62-cd637e3f24b3",
+      "name": "Gordon",
+      "done": true,
+      "shots": 6
+    },
+    "noor100": {
+      "uid": "7a09dfe5-d646-44b0-a521-39ea4d9d60eb",
+      "name": "Noor",
+      "done": true,
+      "shots": 5
+    },
+    "silas101": {
+      "uid": "8d71baec-5eea-418b-bcc5-07ede1bc66c1",
+      "name": "Silas",
+      "done": true,
+      "shots": 6
+    },
+    "ophelia102": {
+      "uid": "d989c61a-6aed-472f-997a-96611f3f2f9a",
+      "name": "Ophelia",
+      "done": true,
+      "shots": 3
+    }
+  },
+  "circles": {
+    "trailrunners": "52d093f4-9855-4634-ac40-08e1f6b045bd",
+    "neighbors": "da62bd9e-f8f0-4688-bc00-64892325f7fa",
+    "farmers": "29447cc6-28b6-402f-8ecf-36060551ca6d",
+    "boardgames": "6223b7f0-988c-481b-922f-1a088cc8fcd7",
+    "cycling": "d65cc59c-729a-4ec4-a557-941348aaac6a",
+    "alumni": "8b299dcf-8734-42c9-9d0f-759802ec2bdd",
+    "film": "eee07d95-0959-492e-908b-d56703a94c25",
+    "swimmers": "40135ac5-6ef8-434c-afdf-98b0cfa058cd",
+    "climbing": "3da32647-0bda-4eb7-8612-e3d3533661d4",
+    "vinyl": "d5c218d3-e9cf-4af0-ad5a-d9bd6e4e30ca",
+    "newparents": "ec656d0b-2002-43e1-84c0-3afd22427032",
+    "founders": "99066098-8f21-420f-b147-70da1fb9b272",
+    "photowalks": "126482ca-1e7e-483e-a495-0d9dacec4b81",
+    "wine": "feed4774-8c3b-4d6d-9791-e42ac425a042",
+    "garden": "a458c5c8-06ae-4e6f-ad49-988f46c18f99",
+    "volunteers": "7a1d1d82-2348-4332-b34d-c2ec66b162ea",
+    "yoga": "88df5541-232d-4a9d-ba33-2bd9eb2eac0b",
+    "jazz": "0a96024e-355c-4da3-b507-b13dd56e284c",
+    "bookclub": "6560beef-59eb-4a13-9314-dd907931f092",
+    "marin": "3977e63d-ae64-4a6b-a1db-5cd070c59e82",
+    "surf": "5cd36ad4-f4d1-4804-b7f2-d70fed403c45",
+    "chess": "eed0f4fc-b600-422c-9b2c-8944a279f6ec"
+  }
+}

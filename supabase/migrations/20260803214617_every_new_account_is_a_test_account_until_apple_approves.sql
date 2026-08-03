@@ -1,0 +1,16 @@
+-- TEMPORARY (2026-08-04, user directive): until Apple approves the app, every
+-- account created in the system is a TEST account -- the review build's users
+-- must meet each other and nobody else, and must never reach a real user.
+--
+-- `users.is_test` is the partition (one unconditional clause in public.others(),
+-- the sole candidacy chokepoint; groups.is_test is stamped from the creator by
+-- the groups_stamp_is_test trigger, so a circle a new account creates follows
+-- it automatically). The signup path in supabase/functions/user.ts inserts the
+-- row WITHOUT naming is_test, so the column DEFAULT is what every new account
+-- takes -- which is why this is a one-line default flip and not a code change.
+--
+-- TO REVERT once Apple has approved:
+--   ALTER TABLE public.users ALTER COLUMN is_test SET DEFAULT false;
+-- and flip back whichever accounts were created in the meantime and are real.
+-- Existing rows are untouched by this migration.
+ALTER TABLE public.users ALTER COLUMN is_test SET DEFAULT true;
