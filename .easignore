@@ -1,0 +1,88 @@
+# What EAS leaves OUT of the archive it uploads to build.
+#
+# THIS FILE BELONGS AT THE REPO ROOT, not in mobile/. The Expo project is
+# mobile/, but the archive is rooted where git is — here — so a .easignore
+# under mobile/ does not govern it.
+#
+# CAREFUL: when this file exists, EAS uses it INSTEAD OF .gitignore, not on top
+# of it. Everything .gitignore says has to be repeated, or node_modules, the
+# generated native folders and the secrets below all get uploaded. Keep the two
+# in step; the only intended difference is the `mobile/store/` block at the end.
+
+# ── Secrets / env ──────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.p8
+*.p12
+*.jks
+*.key
+*.mobileprovision
+*.keystore
+
+# ── Node ───────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# ── Expo / React Native ────────────────────────────────────────────────────
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Generated native folders. EAS runs its own prebuild; shipping a populated
+# android/ would make it build the locally-generated project instead.
+/mobile/ios/
+/mobile/android/
+
+# ── TypeScript ─────────────────────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── Supabase local dev ─────────────────────────────────────────────────────
+supabase/.branches/
+supabase/.temp/
+supabase/test/
+
+# ── Build artifacts / logs ─────────────────────────────────────────────────
+*.apk
+*.aab
+*.ipa
+*.log
+
+# ── Store pack ─────────────────────────────────────────────────────────────
+mobile/store/apple-review/
+
+# ── Editor / OS ────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.orig.*
+.vscode/
+.idea/
+
+# ── Claude / assistant metadata ────────────────────────────────────────────
+# .claude/ holds .claude/secrets/google-play.json, the Play service account
+# key. It must never reach a build machine.
+.claude/
+.mcp.json
+.agents/
+skills-lock.json
+
+.vercel
+.env*
+
+# ── Signing credentials pulled down with `eas credentials` ─────────────────
+# credentials.json holds the keystore and key PASSWORDS in plaintext. A cloud
+# build must never receive them: EAS holds the keystore server-side and signs
+# with it there. (*.jks above already covers the keystore itself.)
+mobile/credentials.json
+mobile/credentials/
+
+# ── The only thing this file adds over .gitignore ──────────────────────────
+# Store listing artwork and screenshot sources: tracked in git (real work), but
+# no build reads them, and they are ~79 MB of the upload.
+mobile/store/
