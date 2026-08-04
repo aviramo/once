@@ -492,6 +492,18 @@ type MatchCardProps = {
    * out of (see TapMenu). The card knows where the finger was and nothing else
    * does, so it is the card that says. */
   onPhotoTap?: (imageIndex: number, at: TapPoint) => void
+  /** THE INFO SET IS AWAY AND THE HOST IS THE ONE SAYING SO (user directive
+   * 2026-08-04). A stranger's card hides its own set — the photo under it is the
+   * toggle — but your OWN card's photo is spoken for by the edit menu, so the
+   * hide is a named row of that menu and the fact lives with whoever draws it.
+   * Controlled while it is passed: the card never flips it behind the host's
+   * back, it reports every reveal through `onInfoRevealed` and paints what comes
+   * back, so the two can never disagree about what is on the screen. */
+  hideInfo?: boolean
+  /** The set came back — a tap on the photo it was hidden on, or the reel moving
+   * to another photo (a hidden state never outlives the photo it was asked for).
+   * Only meaningful beside `hideInfo`. */
+  onInfoRevealed?: () => void
   /** When provided, the family/kids card becomes tappable (own-profile preview). */
   onFamilyTap?: () => void
   /** When provided, the height/smoking row becomes tappable, and on your OWN
@@ -623,6 +635,8 @@ const MatchCardBase = ({
   footerBlock,
   footerBg,
   onPhotoTap,
+  hideInfo,
+  onInfoRevealed,
   onFamilyTap,
   onTraitsTap,
   onCircleTap,
@@ -685,9 +699,16 @@ const MatchCardBase = ({
   // The fact-chip column (distance, family/kids, shared group) states important
   // info but sits over the face. A tap on the photo fades the whole column out
   // so the portrait is unobscured, and a second tap fades it back — the info is
-  // never removed, only one tap away. Gated to remote match cards: the
-  // own-profile preview (onPhotoTap set) taps photos to edit them instead, so it
-  // keeps its chips fixed.
+  // never removed, only one tap away.
+  //
+  // EVERY CARD CAN CLEAR ITS PHOTO; ONLY THE WAY IN DIFFERS (user directive
+  // 2026-08-04). On a stranger's card the photo itself is the toggle. Your OWN
+  // card's photo already answers with its edit menu, so the hide is a named row
+  // OF that menu ("show photo") and the host holds the fact — `hideInfo` above.
+  // The way BACK is the same on both: a tap on the photo the set was hidden on.
+  // Which is why the set was left standing on the own card for as long as the
+  // menu was the only thing a photo could do — the one card whose photographs
+  // could never be seen whole was the user's own.
   //
   // THE PHOTO TOGGLES, THE CHIPS DO NOT (user directive 2026-07-30). The only
   // toggle surface is the photo Pressable under the whole info set; every tile
@@ -704,7 +725,6 @@ const MatchCardBase = ({
   //
   // Reset to visible on every profile swap so a hidden state can't carry into
   // card B.
-  const chipsToggleable = !onPhotoTap
   const [chipsHidden, setChipsHidden] = useState(false)
   // Mirror of chipsHidden the scroll handler reads without re-subscribing.
   const chipsHiddenRef = useRef(false)
@@ -714,28 +734,50 @@ const MatchCardBase = ({
   // framework's default withTiming curve — an ease-in-out, which is what makes
   // it start and land without a snap.
   const chipsShown = useSharedValue(1)
-  const toggleChips = useCallback(() => {
-    const next = !chipsHiddenRef.current
-    // Nothing gates it any more: the reel's every page is a photo now that the
-    // status card at the top of the scroll is gone, so the photo IS the page
-    // whenever this fires.
+  // The one place the set is put away or brought back, whoever asked. A state it
+  // is already in is not a change: a reveal reports itself to the host, whose
+  // flag comes back on the next render, and re-running the timing there would
+  // restart the curve a frame into it.
+  const applyChips = useCallback((next: boolean) => {
+    if (chipsHiddenRef.current === next) return
     chipsHiddenRef.current = next
     setChipsHidden(next)
     chipsShown.value = withTiming(next ? 0 : 1)
   }, [])
+  const toggleChips = useCallback(() => {
+    // Nothing gates it any more: the reel's every page is a photo now that the
+    // status card at the top of the scroll is gone, so the photo IS the page
+    // whenever this fires.
+    applyChips(!chipsHiddenRef.current)
+  }, [applyChips])
+  // WHAT THE HOST SAYS IS WHAT IS PAINTED. The own card's hide arrives as a prop
+  // (see hideInfo), so the row that sets it and the zoom that answers it are one
+  // statement rather than two states kept in step.
+  useEffect(() => {
+    if (hideInfo === undefined) return
+    applyChips(hideInfo)
+  }, [hideInfo, applyChips])
   // Bring the chips back — used both on a fresh profile and whenever the user
   // scrolls onto a different photo (user directive 2026-07-26): a hidden state
   // must never persist past the photo it was toggled on. No-op when visible.
+  // The host is told, so a card it is driving does not go on believing the set
+  // is away after the photo has brought it back.
   const revealChips = useCallback(() => {
     if (!chipsHiddenRef.current) return
-    chipsHiddenRef.current = false
-    setChipsHidden(false)
-    chipsShown.value = withTiming(1)
-  }, [])
+    applyChips(false)
+    onInfoRevealed?.()
+  }, [applyChips, onInfoRevealed])
+  // A new person is a fresh card, and a fresh card wears its info set. INSTANT
+  // and not the reveal's timing: the set is not coming BACK here, it is what the
+  // new card was already wearing, and a zoom-in over a face that has just
+  // arrived would read as the card assembling itself. A host driving the card is
+  // still told, so its flag cannot outlive the card the row was pressed on.
   useEffect(() => {
+    const wasHidden = chipsHiddenRef.current
     chipsHiddenRef.current = false
     setChipsHidden(false)
     chipsShown.value = 1
+    if (wasHidden) onInfoRevealed?.()
   }, [match.user_id])
   // ZOOM ONLY — scale 1 → 0 and back, nothing else (user directive 2026-07-29,
   // restored 2026-08-03 after an afternoon as a straight drop off the bottom of
@@ -1054,14 +1096,22 @@ const MatchCardBase = ({
     Keyboard.dismiss()
     return true
   }, [])
+  // THE ONE THING A PHOTO DOES, in the one order it does it (user directive
+  // 2026-08-04). A set that is AWAY comes back first, on every card and whatever
+  // else the photo would have answered with: the user is looking at a picture he
+  // asked to see whole, and the next tap is him asking for the words back — it
+  // may not be spent on opening a menu instead. With the set up, the photo is
+  // either the host's (the own card's edit menu) or the toggle itself.
   const handlePhotoTap = useCallback((imageIndex: number, e: GestureResponderEvent) => {
     if (swallowTapWhileEditing()) return
+    if (chipsHiddenRef.current) { revealChips(); return }
+    if (!onPhotoTap) { toggleChips(); return }
     // Window coordinates, straight off the touch: what opens is a menu that grows
     // out of the finger (TapMenu), and this is the only place that knows where it
     // was. Read on the frame of the tap — the card scrolls and rises, so a point
     // measured later is a point somewhere else.
-    onPhotoTap?.(imageIndex, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })
-  }, [swallowTapWhileEditing, onPhotoTap])
+    onPhotoTap(imageIndex, { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY })
+  }, [swallowTapWhileEditing, onPhotoTap, revealChips, toggleChips])
   const handleFamilyTap = useCallback(() => {
     if (swallowTapWhileEditing()) return
     onFamilyTap?.()
@@ -1303,14 +1353,14 @@ const MatchCardBase = ({
         onScroll={(e: any) => {
           const y = e.nativeEvent.contentOffset.y
           scrollYRef.current = y
-          // The resting page is tracked unconditionally — the re-pin on a page
-          // height change needs it on every card, not only the ones whose chips
-          // can be toggled. Revealing the chips is what is conditional.
+          // The resting page is tracked for the re-pin on a page height change;
+          // a page CHANGE also brings the set back, on every card, because a
+          // hidden state must never outlive the photo it was asked for.
           if (photoHeight > 0) {
             const page = Math.round(y / photoHeight)
             if (page !== photoPageRef.current) {
               photoPageRef.current = page
-              if (chipsToggleable) revealChips()
+              revealChips()
             }
           }
         }}
@@ -1334,16 +1384,13 @@ const MatchCardBase = ({
                 onSettle={onImageSettle}
                 darkenIfLight
               />
-              {onPhotoTap ? (
-                <Pressable
-                  style={StyleSheet.absoluteFill}
-                  onPress={e => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1, e)}
-                />
-              ) : chipsToggleable ? (
-                // Remote match card: a tap on the open photo toggles the
-                // fact-chip column so the face can be seen unobscured.
-                <Pressable style={StyleSheet.absoluteFill} onPress={toggleChips} />
-              ) : null}
+              {/* ONE responder over the photo, whatever the tap turns out to
+                  mean (see handlePhotoTap): bring the info set back, open the
+                  photo's own menu, or clear the face. */}
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={e => handlePhotoTap(sections[0].type === 'photo' ? sections[0].imageIndex : -1, e)}
+              />
             </>
           )}
 
@@ -1526,16 +1573,12 @@ const MatchCardBase = ({
                 cachePolicy="memory-disk"
                 onSettle={onImageSettle}
               />
-              {onPhotoTap ? (
-                <Pressable
-                  style={StyleSheet.absoluteFill}
-                  onPress={e => handlePhotoTap(section.imageIndex, e)}
-                />
-              ) : chipsToggleable ? (
-                // Same toggle as the hero: a tap on this photo fades its bio chip
-                // out so the image is unobscured, and taps it back.
-                <Pressable style={StyleSheet.absoluteFill} onPress={toggleChips} />
-              ) : null}
+              {/* The hero's one responder again: this photo's bio tile clears
+                  off it and comes back exactly as the fact set does. */}
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={e => handlePhotoTap(section.imageIndex, e)}
+              />
               {/* Bio as a big WHITE chip floated at the bottom of the second
                   photo, inset on every side. Its END inset clears the floating
                   action (so it is never where that button is). On
@@ -1558,7 +1601,7 @@ const MatchCardBase = ({
                       end: showFloatingAction ? ROUND_BUTTON_SIZE + MD + MD : MD,
                       bottom: overlayBottomOffset + infoBottomLift,
                     },
-                    chipsToggleable && chipsAnimStyle,
+                    chipsAnimStyle,
                   ]}
                 >
                   {/* ONE TILE, TWO ROWS (user directive 2026-08-03). The body
@@ -1684,7 +1727,7 @@ const MatchCardBase = ({
           <Animated.View
             style={[
               styles.identityChipWrap,
-              chipsToggleable && !trailing.mounted && chipsAnimStyle,
+              !trailing.mounted && chipsAnimStyle,
             ]}
           >
             <Chip
@@ -1695,7 +1738,7 @@ const MatchCardBase = ({
               // "End chat", or the mark that opens the message) is left standing
               // in a tile that has closed around it. Same tap, same curve, same
               // statement as the rest of the set: give the photograph its room.
-              collapsed={chipsToggleable ? chipsHidden : undefined}
+              collapsed={chipsHidden}
               tone="neutral"
               onPhoto
               // The state's own trailing fact, behind the chip's hairline rule:

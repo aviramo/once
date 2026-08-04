@@ -497,6 +497,10 @@ export default {
   'settings.locationLockedDesc': 'כדי לשנות מיקום, נדרש לצאת קודם מהצפייה או מההזמנה הפעילה. אחרי {שתסיים|שתסיימי} את האינטראקציה הנוכחית, {תוכל|תוכלי} לעדכן את המיקום',
   'settings.duplicatePhotoTitle': 'תמונה כפולה',
   'settings.duplicatePhotoBody': 'לא ניתן להעלות את אותה תמונה פעמיים. תמונות כפולות הוסרו',
+  // The one row that does nothing TO the photo: it takes the chips off it, so
+  // the picture can be looked at the way it will be looked at. The next tap on
+  // the photo brings them back.
+  'settings.photoEditShow': 'הצגת תמונה',
   'settings.photoEditMoveUp': 'הזזה למעלה',
   'settings.photoEditReplace': 'החלפת תמונה',
   'settings.photoEditMoveDown': 'הזזה למטה',

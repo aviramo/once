@@ -2158,6 +2158,13 @@ export function PreviewFieldPage({
   // moment where a photo is chosen and the finger that chose it is unknown.
   const [photoMenu, setPhotoMenu] = useState<{ index: number; at: TapPoint } | null>(null)
   const photoMenuIndex = photoMenu?.index ?? null
+  // THE PHOTO ALONE (user directive 2026-08-04). A stranger's card clears its
+  // info set with a tap on the photograph; on your own card that tap opens the
+  // edit menu, so the one card whose pictures could never be seen whole was the
+  // user's own. The menu's first row is that tap, said in words — and the way
+  // back is the ordinary one: the next tap on the photo brings the set up again
+  // (the card reports it here, so this and what is painted stay one fact).
+  const [photoOnly, setPhotoOnly] = useState(false)
   const [familyPopupVisible, setFamilyPopupVisible] = useState(false)
   const [traitsPopupVisible, setTraitsPopupVisible] = useState(false)
   // ── THE FIRST-OPEN PHOTO TUTORIAL (user directive 2026-08-01) ─────────────
@@ -2553,6 +2560,11 @@ export function PreviewFieldPage({
               bottomInset={0}
               isForKids={profile?.family?.isForKids ?? null}
               self
+              // The info set is away because the menu's own row put it there,
+              // and the card hands the fact back the moment a tap (or a scroll
+              // onto another photo) brings it up.
+              hideInfo={photoOnly}
+              onInfoRevealed={() => setPhotoOnly(false)}
               onPhotoTap={(imageIndex, at) => {
                 if (imageIndex < 0) return
                 // The tutorial is put away by a tap on a photo as much as by one
@@ -2572,8 +2584,15 @@ export function PreviewFieldPage({
           </PullContext.Provider>
         </Animated.View>
       ) : null}
-      {/* WHAT CAN BE DONE TO THIS PHOTO, TOP-DOWN: move up, replace, ADD, delete,
-          move down (user directive 2026-07-31, with the add placed 2026-08-01).
+      {/* WHAT CAN BE DONE TO THIS PHOTO, TOP-DOWN: show it, move up, replace,
+          ADD, delete, move down (user directive 2026-07-31, with the add placed
+          2026-08-01 and the show 2026-08-04).
+          SHOWING IT LEADS, and it is the one row that does nothing TO the photo
+          — it takes everything OFF it. A stranger's card clears its info set
+          with a bare tap on the photograph; here that tap is spoken for by this
+          very menu, so the same thing is asked for in words. It stands first
+          because it is what the reader wants before he edits anything: to see
+          what the photo actually looks like with nothing on it.
           One white tile with the app's hairline between its rows — the very
           object the card's fact set is — and each row a glyph and the words for
           it. ONLY WHAT APPLIES IS LISTED: a move at either end of the list, a
@@ -2599,6 +2618,12 @@ export function PreviewFieldPage({
         at={photoMenu?.at ?? null}
         onDismiss={() => setPhotoMenu(null)}
         actions={[
+          {
+            key: 'show',
+            label: t('settings.photoEditShow'),
+            renderIcon: (c: string) => <EyeOpenIcon color={c} size={TAP_MENU_ICON} />,
+            onPress: () => { tap(); setPhotoMenu(null); setPhotoOnly(true) },
+          },
           ...(canMoveUp ? [{
             key: 'up',
             label: t('settings.photoEditMoveUp'),

@@ -460,6 +460,9 @@ export default {
   'settings.locationLockedDesc': "To change your location, first leave the active view or invitation. Once you finish the current interaction, you'll be able to update your location",
   'settings.duplicatePhotoTitle': 'Duplicate photo',
   'settings.duplicatePhotoBody': 'The same photo cannot be uploaded twice. Duplicate photos were removed',
+  // See he.ts: the row that clears the chips off the photo rather than editing
+  // it. A tap on the photo brings them back.
+  'settings.photoEditShow': 'Show photo',
   'settings.photoEditMoveUp': 'Move up',
   'settings.photoEditReplace': 'Replace photo',
   'settings.photoEditMoveDown': 'Move down',
