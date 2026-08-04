@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { ReactNode } from 'react'
 import { PHOTO_CHROME, INK, WHITE } from '../colors'
-import { ROUND_BUTTON_SIZE, NOTIFY_DOT_SIZE, NOTIFY_DOT_RING, CARD_SHADOW_STRONG, PRESSED_OPACITY } from '../tokens'
+import { ROUND_BUTTON_SIZE, NOTIFY_DOT_SIZE, NOTIFY_DOT_RING, CARD_SHADOW, PRESSED_OPACITY } from '../tokens'
 import { FIXED_BOX_SCALE } from '../fonts'
 import { GlyphScale } from './icons'
 
@@ -150,8 +150,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   // The app's one lift at double the stop: a white disc floating on a
-  // photograph has no card edge to be read against — see CARD_SHADOW_STRONG.
-  shadow: { boxShadow: CARD_SHADOW_STRONG },
+  // photograph has no card edge to be read against — which is the stop the
+  // whole app took on 2026-08-04, so this is the app's one CARD_SHADOW now.
+  shadow: { boxShadow: CARD_SHADOW },
   // Solid INK disc in a WHITE ring — the ring is what keeps it off the white
   // button under it and off any photo behind it. Only its offsets are
   // per-button (they follow the diameter's arc); the disc itself is fixed.

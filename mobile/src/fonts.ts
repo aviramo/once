@@ -185,19 +185,37 @@ export const FONT_LINE_RATIO = FONT_ASCENT + FONT_DESCENT
 // landed 4.5px under the cap-ink centre of "Inbal, 51", where a glyph beside a
 // genuinely Hebrew label on the same screen was exact to the pixel).
 //
-// So a caller that HAS the label hands it over and the line answers for itself:
-// any Hebrew letter in it and the line is Hebrew, otherwise it is Latin — digits
-// alone never make a Hebrew line Latin (they reach cap height, but "לפני 3 ימים"
-// is still a Hebrew line and reads from its letters). A caller with no label to
-// give — a field carrying text that does not exist yet — keeps the app's own
-// direction as the fallback it always was.
-// (Escaped, not the literal block: a raw range in source is two characters
-// nobody can see, and this one decides where every glyph in the app sits.)
+// So a caller that HAS the label hands it over and the line answers for itself.
+// A caller with no label to give — a field carrying text that does not exist yet
+// — keeps the app's own direction as the fallback it always was.
+//
+// AND A LINE'S INK IS ITS TALLEST INK (user report 2026-08-04). The test used to
+// be "any Hebrew letter in it and the line is Hebrew", on the reading that a
+// digit does not change what a Hebrew sentence IS — but this is not a question
+// about the sentence, it is a question about the BAND the eye reads, and that
+// band runs from the baseline to whatever rises highest in it. Digits reach cap
+// height (see CAP_HEIGHT), so "אופיר, 44" paints ink up to 0.714 exactly as
+// "Inbal, 51" does, and centring the mark beside it on the 0.600 Hebrew body put
+// it ~1dp low — visible against the very chips under it on the same card, whose
+// Latin labels take the correct nudge (reported on the match card's own heading,
+// the day the self card's profile mark was added to it). So a label carrying
+// cap-tall ink is a cap-tall line whatever else is in it, and only a line
+// written in Hebrew letters ALONE takes the Hebrew constant.
+// (Both classes escaped, not the literal blocks: a raw range in source is two
+// characters nobody can see, and this one decides where every glyph in the app
+// sits.)
 const HEBREW_LETTER = /[\u0590-\u05FF]/
+
+// Everything that rises to CAP_HEIGHT: the digits, and the Latin letters over
+// the same Latin-1 + Extended-A span LATIN_LETTER covers below (every letter a
+// name in this app is written with).
+const CAP_INK = /[0-9A-Za-z\u00C0-\u024F]/
 
 const inkRise = (label?: string): number =>
   (FONT_ASCENT - FONT_DESCENT) / 2 -
-  ((label == null ? isRTL : HEBREW_LETTER.test(label)) ? HEBREW_HEIGHT : CAP_HEIGHT) / 2
+  ((label == null ? isRTL : HEBREW_LETTER.test(label) && !CAP_INK.test(label))
+    ? HEBREW_HEIGHT
+    : CAP_HEIGHT) / 2
 
 // Nudge a glyph down by this much to sit on a label's ink rather than on its
 // line box. Takes the UNSCALED font size and applies the OS font scale itself

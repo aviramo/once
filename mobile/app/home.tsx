@@ -19,7 +19,7 @@ import * as Network from 'expo-network'
 import { Button } from '../src/components/Button'
 import { Spinner } from '../src/components/Spinner'
 import { INK, INK_PRESSED, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, INK_WASH, INK_SUBTLE } from '../src/colors'
-import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, MOTION, HEADLINE_MIN_DWELL_MS, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SHEET_GAP, CARD_SHADOW_STRONG, PRESSED_OPACITY, bottomGap } from '../src/tokens'
+import { SM, MD, LG, XL, RADII, STROKE, WEIGHT, TEXT, ICON, PULSE, OVERLAY, MOTION, HEADLINE_MIN_DWELL_MS, GLYPH_CIRCLE_RATIO, SEARCH_WATCHDOG_SLACK_MS, SHEET_GAP, CARD_SHADOW, PRESSED_OPACITY, bottomGap } from '../src/tokens'
 import { useBottomInset } from '../src/hooks/useBottomInset'
 import { ConfirmDialog } from '../src/components/ConfirmDialog'
 import { BuildProfileGate } from '../src/components/BuildProfileGate'
@@ -4511,9 +4511,9 @@ const styles = StyleSheet.create({
     // by moving (user directive 2026-07-28 â€” size and motion were both tried
     // and rejected; the lift is the whole of it).
     // It is a round button standing off the page, so it casts what one casts:
-    // CARD_SHADOW_STRONG, the app's one lift at the round button's stop (user
+    // CARD_SHADOW, the app's one lift, at what was the round button's stop (user
     // directive 2026-08-03, replacing a deep 12/24/0.30 set of its own).
-    boxShadow: CARD_SHADOW_STRONG,
+    boxShadow: CARD_SHADOW,
   },
   // The centre action surface is a SOLID INK disc carrying a WHITE glyph â€”
   // the same arrangement as the primary Button, so the one big tap target on

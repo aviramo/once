@@ -28,7 +28,7 @@ import type { Profile } from '../stores/userStore'
 import { familyEmptyWeek, familyEqual, FAMILY_MAX_KIDS, FAMILY_MAX_WEEKS, startOfDisplayedWeek, sundayOfWeek, toISODate, defaultWeekStart, weekendDays, type FamilyData, type FamilyKid } from '../lib/family'
 import { XS, SM, MD, LG, RADIUS, TEXT, WEIGHT, ICON, TAP_SLOP, STROKE, SHEET_GAP, SEARCH_DEBOUNCE_MS, DISABLED_OPACITY } from '../tokens'
 import { GlyphSlot } from './GlyphSlot'
-import { INK, INK_WASH, PAGE, SHADOW_BLACK, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../colors'
+import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_MID, WHITE_STRONG, INK_SUBTLE, INK_DIM, LINE } from '../colors'
 import { OUTLINE_SKIN } from '../field'
 import { SlidersIcon, RadiusIcon, GenderIcon, SignOutIcon, TrashIcon, UserIcon, CameraIcon, ChevronUpIcon, ChevronDownIcon, PhotoReplaceIcon, PhotoTrashIcon, CheckIcon, CreditIcon, SupportIcon, GlobeIcon, EyeOpenIcon, EyeOffIcon } from './icons'
 import { creditTotal, creditHeld } from '../lib/credits'
@@ -512,15 +512,15 @@ function PreferencesContent({ leading }: {
     locationType === 'home' ? <HomeGlyph color={INK} size={ICON.md} />
     : locationType === 'work' ? <WorkGlyph color={INK} size={ICON.md} />
     : <PinGlyph color={INK} size={ICON.md} />
-  // An active page1/page2 interaction freezes the location field: 'watching'
+  // An active interaction on either board freezes the location field: 'watching'
   // (looking at a candidate), 'waiting' (outgoing invite), or 'pending'
-  // (incoming invite on page2). Changing location mid-interaction would shift
+  // (an invitation standing on me). Changing location mid-interaction would shift
   // the distance shown to the other party under an in-flight interaction. The
   // row stays tappable but explains why instead of opening the picker.
   const locationLocked =
     profile.state === 'watching' ||
     profile.state === 'waiting' ||
-    profile.relations?.page2State === 'pending'
+    profile.relations?.inviteState === 'pending'
 
   return (
     <View style={styles.section}>
@@ -3022,7 +3022,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent', borderRadius: RADIUS,
     paddingHorizontal: MD, paddingVertical: MD, marginTop: SM,
     overflow: 'hidden',
-    shadowColor: SHADOW_BLACK, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 1,
+    // (No shadow: the row's ground is transparent — the card it stands in owns
+    // the white and the lift. The 2/8/0.05 drop declared here painted nothing on
+    // either platform and was deleted 2026-08-04.)
   },
   // Variant for use inside a grouped card (e.g. accountLinksCard) — no own
   // background or rounded corners; the parent card provides those.

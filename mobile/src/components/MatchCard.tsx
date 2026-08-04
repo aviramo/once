@@ -16,7 +16,7 @@ import { BIO_MAX, BIO_EDIT_LINES } from '../lib/bio'
 import { resolveLocationType, type Profile, type LocationType } from '../stores/userStore'
 import { buildFamilySegments } from './FamilyCard'
 import { Chip, ChipStack, plusBadge, CHIP_BLOCK_PAD, CHIP_BLOCK_SEAM_PAD, PinIcon, HomeIcon, WorkIcon, ClockIcon, KidsIcon, HeightIcon, SmokeIcon, PresenceDot, type ChipTone } from './Chip'
-import { ChatIcon, ShieldIcon, GroupsIcon, ChevronEndIcon } from './icons'
+import { ChatIcon, ShieldIcon, GroupsIcon, ChevronEndIcon, UserIcon } from './icons'
 import type { TapPoint } from './TapMenu'
 import { sharedCircle, useMyFriendCount } from '../lib/circles'
 import { RoundButton } from './RoundButton'
@@ -1728,8 +1728,18 @@ const MatchCardBase = ({
               // 2026-07-29): reporting is a footnote to "who is this", not a
               // second card-level control competing with the round action. It is the
               // tile's FIRST mark.
-              renderIcon={onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
-              onIconPress={onReport}
+              //
+              // AND ON YOUR OWN CARD THAT MARK IS THE PROFILE'S (user directive
+              // 2026-08-04): there is nobody to report, so the slot stood empty
+              // and the one tile that says WHO this is began with a name and no
+              // mark, out of step with every other card. It wears the app's own
+              // `UserIcon` — the dock's profile key, the mark that opens this
+              // very card — and it is INERT: the card IS the profile, so there
+              // is nowhere for it to go.
+              renderIcon={self
+                ? c => <UserIcon color={c} size={ICON.sm} />
+                : onReport ? c => <ShieldIcon color={c} fill={c} size={ICON.sm} /> : undefined}
+              onIconPress={self ? undefined : onReport}
             />
           </Animated.View>
         </View>

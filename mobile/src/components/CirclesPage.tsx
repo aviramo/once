@@ -1164,10 +1164,22 @@ function HubView({ push, bottomInset, initialGroup, onInitialGroupConsumed }: {
 // "what I can do" — the app's own rhythm, the one every popup keeps.
 //
 // A user who has friends and no groups gets this same page with his friends row
-// ABOVE it (`lead`, user directive 2026-07-30) and nothing else changed: the
-// list he does have is one strip at the top, and the block under it keeps the
-// whole remaining height and centres in it exactly as it does on a page with no
-// row at all.
+// ABOVE it (`lead`, user directive 2026-07-30): the list he does have is one
+// strip at the top, and the block under it keeps the whole remaining height and
+// centres in it exactly as it does on a page with no row at all.
+//
+// BUT A PAGE WITH A ROW ON IT SAYS LESS (user directive 2026-08-04). Two of the
+// four pieces are there because the page is EMPTY, and with the friends row
+// standing over them neither is true any more:
+//   • the DRAWING is the page saying what it is when there is nothing on it to
+//     look at, and above it now is the real thing — a circle with twelve people
+//     in it — so the picture of a circle is an illustration of the row under it;
+//   • the purple INVITE is the same action, at the same size, in the same
+//     colour, as the button in that row. One screen may not offer one thing
+//     twice, least of all with the copy in between explaining why.
+// What is left is the two lines saying what circles are FOR (this user has not
+// got one yet, which is the whole reason the block is here at all) and the one
+// way forward he cannot already reach from the row: finding a circle.
 function HubStart({ profile, bottomInset, onFind, lead }: {
   profile: StoreProfile
   bottomInset: number
@@ -1175,35 +1187,45 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
   /** The my-friends strip, when there is anyone in that circle — see HubView. */
   lead?: React.ReactElement | null
 }) {
+  const hasRow = !!lead
   return (
     <PullScrollView
       style={s.scroll}
       contentContainerStyle={[s.startBody, { paddingBottom: bottomInset }]}
       showsVerticalScrollIndicator={false}
     >
-      {lead ? <View style={s.startLead}>{lead}</View> : null}
+      {hasRow ? <View style={s.startLead}>{lead}</View> : null}
       <View style={s.startMain}>
-        <View style={s.startArt}><CirclesArt /></View>
-        <Text style={s.startTitle}>{t('circles.startTitle')}</Text>
+        {hasRow ? null : <View style={s.startArt}><CirclesArt /></View>}
+        {/* The title's gap is the one UNDER the picture, so it goes with it. */}
+        <Text style={[s.startTitle, hasRow && s.startTitleBare]}>{t('circles.startTitle')}</Text>
         <Text style={s.startDesc}>{genderize(t('circles.startDesc'), profile?.is_male)}</Text>
         {/* THE RECOMMENDED WAY LEADS HERE, AND THIS PAGE IS THE ONE EXCEPTION TO
             "the purple ends the block" (user directive 2026-07-31, put back the
             same day it was turned): these are not a popup's two answers, they are
             two WAYS FORWARD out of an empty page, and the first one read must be
-            the one we are recommending. */}
+            the one we are recommending. It is only ever a PAIR on the page that
+            genuinely is empty — see above. */}
         <View style={s.startActions}>
-          <Button
-            label={t('circles.inviteFriend')}
-            variant="primary"
-            size="lg"
-            iconStart={<ShareGlyph color={WHITE} />}
-            onPress={() => { tap(); if (profile) shareFriendInvite(profile) }}
-          />
+          {hasRow ? null : (
+            <Button
+              label={t('circles.inviteFriend')}
+              variant="primary"
+              size="lg"
+              iconStart={<ShareGlyph color={WHITE} />}
+              onPress={() => { tap(); if (profile) shareFriendInvite(profile) }}
+            />
+          )}
+          {/* AND ALONE IT IS THE PURPLE (user directive 2026-08-04). It stands
+              second on the empty page because the invitation above it is the one
+              being recommended; with that invitation gone this is not the quiet
+              half of a pair any more, it is the one thing the block is offering,
+              and the app's offer is always the filled button. */}
           <Button
             label={t('circles.startFind')}
-            variant="secondary"
+            variant={hasRow ? 'primary' : 'secondary'}
             size="lg"
-            iconStart={<SearchIcon color={INK_SUBTLE} />}
+            iconStart={<SearchIcon color={hasRow ? WHITE : INK_SUBTLE} />}
             onPress={onFind}
           />
         </View>
@@ -3373,12 +3395,20 @@ const s = StyleSheet.create({
   // one: what comes next is centred in what is left, so a gap declared there
   // would move the picture off centre on a page that has no row at all. Same MD
   // the card and the block under it always stood at here.
-  startLead: { marginBottom: MD },
+  // The friends row standing alone over the block: it is a CARD of one row, and
+  // it stands outside ContainedRoster, whose lift plate is what carries the
+  // shadow for a real list — so it states the same lift here (user directive
+  // 2026-08-04). The corner is the rows' own; it is repeated on the wrapper
+  // because a shadow follows the box that declares it.
+  startLead: { marginBottom: MD, borderRadius: RADIUS, boxShadow: CARD_SHADOW },
   startArt: { alignItems: 'center' },
   // A heading at heading SIZE and ordinary WEIGHT (user directive 2026-07-30):
   // the picture over it is already the page's emphasis, so the line under it
   // only has to be read, not shouted.
   startTitle: { marginTop: LG, fontSize: TEXT.lg, color: INK, textAlign: 'center' },
+  // With no picture over it the title LEADS the block, and a gap over the first
+  // line of a centred column is half a step down the page, not air.
+  startTitleBare: { marginTop: 0 },
   // The title and the sentence explaining it are ONE block, hence the small gap.
   startDesc: { marginTop: SM, fontSize: TEXT.md, color: INK_SUBTLE, textAlign: 'center' },
   // The widest gap on the page, on purpose: above it is what this is, below it

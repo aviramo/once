@@ -539,14 +539,17 @@ export const EDGE_SHADE_REACH = 26
 // thing it is resting on. Small: what has to read is the card's own edge
 // against a tint only a shade away from its white, not depth. A single native
 // boxShadow, never an Android `elevation`, which can only drop downwards.
-export const CARD_SHADOW = '0px 0px 8px 0px rgba(0,0,0,0.08)'
+//
+// The stop was read on a device at four strengths on 2026-08-04 and settled
+// HALFWAY between the last two: 0.08 and 0.12 were no shadow at all wherever
+// the two grounds are close — a purple button on the page tint, a white tile on
+// a pale photograph — and the round button's 0.16 was a shade heavy once every
+// tile in the app was wearing it. THERE IS ONE STOP FOR EVERYTHING:
+// `CARD_SHADOW_STRONG`, which that button carried while the card's stop was
+// lower, is deleted. It stays small in every other respect: what has to read is
+// the EDGE, not depth.
 
-// The same lift at DOUBLE the stop, for the one thing that floats free rather
-// than lying on something: a round chrome button standing off a photograph
-// (user directive 2026-08-03). Same offset, same blur — it is the same shadow,
-// not a second treatment — but a white disc on a photo has no card edge to be
-// read against, so at the card's stop it read as flat. Nothing else takes this.
-export const CARD_SHADOW_STRONG = '0px 0px 8px 0px rgba(0,0,0,0.16)'
+export const CARD_SHADOW = '0px 0px 8px 0px rgba(0,0,0,0.14)'
 
 // (There is no shadow for chat's drag handle: the bar is the popup's bar
 // exactly, and what holds it legible is the band of page ground it stands on —
