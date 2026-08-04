@@ -10,12 +10,12 @@
 --
 -- So the pool answers. Every minute (not every five: the invitation lives ten,
 -- and a skipped tick must never be able to cost one), each invitation aimed at
--- a review account that has been standing for at least 40 seconds is accepted
+-- a review account that has been standing for at least 10 seconds is accepted
 -- through the ordinary RPC -- app_approve, the same call the accept button
 -- makes, with all of its locking, credit and board rules. Nothing here
 -- reimplements the transition.
 --
--- The 40 seconds are deliberate: the reviewer sees the waiting card and its
+-- The 10 seconds are deliberate: the reviewer sees the waiting card and its
 -- clock, and then it becomes a chat, which is the product working rather than
 -- a button that answers itself.
 --
@@ -44,7 +44,7 @@ BEGIN
     FROM public.watch w
     JOIN public.users u ON u.user_id = w.target_id
     WHERE w.state = 'invited'
-      AND w.invited_at < now() - interval '40 seconds'
+      AND w.invited_at < now() - interval '10 seconds'
       AND u.is_test
       AND u.data->>'seed' = 'app-store-review'
     ORDER BY w.invited_at
