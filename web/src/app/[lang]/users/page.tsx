@@ -46,7 +46,22 @@ const SEG_VALUES = [
 ] as const;
 // Sort modes for the users list. `recent` = the server's last_seen order;
 // `distance` / `relevance` re-sort in JS relative to the admin's own location.
+// That re-sort is only honest because the WHOLE filtered set is fetched (see
+// FETCH_PAGE): sorting a screenful by distance answers "the closest of the 100
+// most recently seen", which is not the question the dropdown asks.
 const SORT_VALUES = ["recent", "distance", "relevance"] as const;
+// Rows per round trip when paging a result set. PostgREST caps a response at
+// 1000 rows whatever `limit` says, so that is the page size.
+const FETCH_PAGE = 1000;
+// The one bound left on a list. The screen is no longer cut to a screenful —
+// an operator must be able to reach every user in the environment — but the
+// whole set is serialised into the RSC payload, so it is bounded rather than
+// unbounded, and when the bound bites the count line SAYS so (`resultsCapped`).
+// A silent cut is exactly what this replaced.
+const MAX_ROWS = 5000;
+// The list's order, stated once: it is the default sort AND what makes a paged
+// read stable across round trips (an unordered range is not a page of anything).
+const LAST_SEEN_DESC = { ascending: false, nullsFirst: false } as const;
 // `relations` is still selected for the availability gate and the credits /
 // push segments. What a person is DOING no longer comes from it: that is one
 // status per user, read off `watch` via admin_watch_states.
@@ -86,7 +101,28 @@ function lastSeenSort(a: UserRow, b: UserRow): number {
 }
 
 /**
- * Re-order the fetched page by distance / relevance to the admin's location.
+ * Every row a filtered query matches, paged to the ceiling. `build` is handed
+ * the range because the filter chain is the caller's — this only owns how far
+ * the reading goes. `truncated` is true when the ceiling stopped the read, i.e.
+ * the one case where the list on screen is not the whole answer; nothing else
+ * in the panel may cut a list without saying which.
+ */
+async function fetchAllRows(
+  build: (from: number, to: number) => PromiseLike<{ data: unknown }>,
+): Promise<{ rows: UserRow[]; truncated: boolean }> {
+  const rows: UserRow[] = [];
+  for (let from = 0; from < MAX_ROWS; from += FETCH_PAGE) {
+    const to = Math.min(from + FETCH_PAGE, MAX_ROWS) - 1;
+    const { data } = await build(from, to);
+    const page = (data ?? []) as UserRow[];
+    rows.push(...page);
+    if (page.length < to - from + 1) return { rows, truncated: false };
+  }
+  return { rows, truncated: true };
+}
+
+/**
+ * Re-order the whole result set by distance / relevance to the admin's location.
  * `recent` keeps the server's last_seen order. Relevance combines distance and
  * last-login only (lower score = more relevant) — the two signals others()
  * ranks on. Module-level so the impure Date.now() is not called in the page
@@ -376,38 +412,57 @@ export default async function AdminUsers({
   };
 
   let rows: UserRow[];
+  let truncated: boolean;
   if (q) {
     const ql = q.toLowerCase();
     const emailIds = [...emailMap.entries()]
       .filter(([, email]) => email.toLowerCase().includes(ql))
       .map(([id]) => id);
 
-    const nameQ = applySecondary(
-      admin.from("users").select(SELECT).ilike("name", `%${q}%`).limit(100),
-      secondary,
+    const byNameP = fetchAllRows((from, to) =>
+      applySecondary(
+        admin
+          .from("users")
+          .select(SELECT)
+          .ilike("name", `%${q}%`)
+          .order("last_seen", LAST_SEEN_DESC)
+          .range(from, to),
+        secondary,
+      ),
     );
     const byEmail = emailIds.length
-      ? await applySecondary(
-          admin.from("users").select(SELECT).in("user_id", emailIds).limit(100),
-          secondary,
+      ? await fetchAllRows((from, to) =>
+          applySecondary(
+            admin
+              .from("users")
+              .select(SELECT)
+              .in("user_id", emailIds)
+              .order("last_seen", LAST_SEEN_DESC)
+              .range(from, to),
+            secondary,
+          ),
         )
-      : { data: [] as UserRow[] };
-    const byName = await nameQ;
+      : { rows: [] as UserRow[], truncated: false };
+    const byName = await byNameP;
 
     const merged = new Map<string, UserRow>();
-    for (const r of (byName.data ?? []) as UserRow[]) merged.set(r.user_id, r);
-    for (const r of (byEmail.data ?? []) as UserRow[]) merged.set(r.user_id, r);
-    rows = [...merged.values()].sort(lastSeenSort).slice(0, 100);
+    for (const r of byName.rows) merged.set(r.user_id, r);
+    for (const r of byEmail.rows) merged.set(r.user_id, r);
+    rows = [...merged.values()].sort(lastSeenSort);
+    truncated = byName.truncated || byEmail.truncated;
   } else {
-    const { data } = await applySecondary(
-      admin
-        .from("users")
-        .select(SELECT)
-        .order("last_seen", { ascending: false, nullsFirst: false })
-        .limit(100),
-      secondary,
+    const all = await fetchAllRows((from, to) =>
+      applySecondary(
+        admin
+          .from("users")
+          .select(SELECT)
+          .order("last_seen", LAST_SEEN_DESC)
+          .range(from, to),
+        secondary,
+      ),
     );
-    rows = (data ?? []) as UserRow[];
+    rows = all.rows;
+    truncated = all.truncated;
   }
 
   // The shown page's watch status is the only thing joined onto a row here.
@@ -469,7 +524,10 @@ export default async function AdminUsers({
     <AdminShell dict={d} active="users" userLabel={userLabel} backHref="/">
       <Section
         title={d.users}
-        hint={d.resultsCount.replace("{count}", String(rows.length))}
+        hint={
+          d.resultsCount.replace("{count}", String(rows.length)) +
+          (truncated ? ` ${d.resultsCapped}` : "")
+        }
       >
         <div className="space-y-6">
           <SearchControls

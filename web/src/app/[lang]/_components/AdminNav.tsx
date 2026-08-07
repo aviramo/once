@@ -183,13 +183,13 @@ export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Pro
         <SignOutButton label={labels.signOut} />
       </div>
 
-      {/* Mobile: labelled sign-out in the header so it's discoverable (nav
-          lives in the bottom bar). An icon-only square blends into the chrome
-          and operators couldn't find it. */}
-      <div className="ms-auto sm:hidden">
-        <SignOutButton label={labels.signOut} />
-      </div>
-
+      {/* No mobile header sign-out. It used to stand here labelled, from
+          before the bottom bar carried one — and two sign-outs on one screen
+          cost the header the ~90px that pushed the ENVIRONMENT switch off the
+          side of a phone (the header does not wrap and the shell clips its
+          overflow), i.e. the panel's primary control was unreachable on mobile
+          so that a duplicate of a thumb-reach action could be seen twice. The
+          bottom bar's BottomSignOut is the mobile one. */}
       {/* Mobile: fixed bottom tab bar.
           Last cell is a sign-out action (not a navigation link), styled with a
           leading border separator and rose accent so it never reads as another

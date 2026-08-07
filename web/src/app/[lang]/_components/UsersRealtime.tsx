@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { CheckSquare, Square } from "lucide-react";
+import { CheckSquare, ChevronDown, Square } from "lucide-react";
 import type { Dictionary } from "@/i18n/dictionaries";
 import type { Locale } from "@/i18n/locales";
 import type { LngLat } from "@/lib/userLocation";
@@ -59,6 +59,16 @@ function createStore(): Store {
 
 const fill = (t: string, v: Record<string, string | number>) =>
   t.replace(/\{(\w+)\}/g, (_, k: string) => String(v[k] ?? ""));
+
+/**
+ * Cards painted before the first "show more". The SERVER no longer cuts the
+ * list — every user matching the filters is in `initial`, which is what makes
+ * the distance sort and the count line true — so the only thing left to bound
+ * is the DOM: a card carries a menu, popovers and a photo, and a few thousand
+ * of them at once is a frozen tab. Growing is local (the rows are already
+ * here), so it costs a render and no round trip.
+ */
+const CHUNK = 100;
 
 type SheetState = {
   ids: string[];
@@ -154,7 +164,17 @@ export function UsersRealtime({
     };
   }, [initial, store, router]);
 
-  const allIds = useMemo(() => initial.map((i) => i.row.user_id), [initial]);
+  const [shown, setShown] = useState(CHUNK);
+  const visible = useMemo(
+    () => (initial.length <= shown ? initial : initial.slice(0, shown)),
+    [initial, shown],
+  );
+  const remaining = initial.length - visible.length;
+
+  // "Select all" means the cards on the screen, never rows the operator has
+  // not seen: what the bulk bar leads to is a reset, and a destructive action
+  // may not reach further than the list it was taken on.
+  const allIds = useMemo(() => visible.map((i) => i.row.user_id), [visible]);
   const allSelected = selected.size > 0 && selected.size === allIds.length;
 
   function toggle(id: string) {
@@ -254,7 +274,7 @@ export function UsersRealtime({
           max-content, so a long unbroken email would widen the grid past the
           viewport. */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-        {initial.map(({ row, email }) => (
+        {visible.map(({ row, email }) => (
           <LiveUserCard
             key={row.user_id}
             store={store}
@@ -271,6 +291,19 @@ export function UsersRealtime({
           />
         ))}
       </div>
+
+      {remaining > 0 ? (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShown((s) => s + CHUNK)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ChevronDown className="size-4" aria-hidden />
+            {fill(dict.loadMore, { count: remaining })}
+          </button>
+        </div>
+      ) : null}
 
       {/* Bulk action bar — overlays the bottom nav while a selection is live
           (a focused mode: the nav is not needed mid-selection). */}
