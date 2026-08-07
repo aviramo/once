@@ -5,7 +5,7 @@ import type { Dictionary } from "@/i18n/dictionaries";
 import { createSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireViewerScope } from "@/lib/admin-auth";
 import { readAdminEnv, envIsTest } from "@/lib/adminEnv";
-import { AdminNav } from "./AdminNav";
+import { AdminNav, AdminBottomBar } from "./AdminNav";
 import { RealtimeRefresh } from "./RealtimeRefresh";
 import { EnvSwitch } from "./EnvSwitch";
 
@@ -71,6 +71,29 @@ export async function AdminShell({
   // managers, so a manager simply never sees the number.
   const pendingReports = isAdmin ? (counts.reports_pending ?? 0) : 0;
 
+  // Stated once and handed to both renderings: the header pills and the mobile
+  // bottom bar are the same set of destinations carrying the same counts, and
+  // they are two components only because a `fixed` bar may not be a child of a
+  // `backdrop-blur` header (see AdminNav).
+  const nav = {
+    active,
+    visibleKeys: (isAdmin
+      ? ["dashboard", "users", "groups", "reports"]
+      : ["dashboard", "users", "groups"]) as Active[],
+    labels: {
+      dashboard: dict.nav.dashboard,
+      users: dict.nav.users,
+      groups: dict.nav.groups,
+      reports: dict.nav.reports,
+      signOut: dict.signOut,
+    },
+    badges: {
+      reports: pendingReports,
+      users: { count: usersTotal, tone: "info" as const },
+      groups: { count: groupsTotal, tone: "info" as const },
+    },
+  };
+
   return (
     // overflow-x-clip guards against a child momentarily wider than the
     // viewport without introducing a scroll container (the sticky header and
@@ -107,27 +130,7 @@ export async function AdminShell({
             </span>
           </Link>
           <EnvSwitch env={env} labels={dict.env} />
-          <AdminNav
-            active={active}
-            visibleKeys={
-              isAdmin
-                ? ["dashboard", "users", "groups", "reports"]
-                : ["dashboard", "users", "groups"]
-            }
-            labels={{
-              dashboard: dict.nav.dashboard,
-              users: dict.nav.users,
-              groups: dict.nav.groups,
-              reports: dict.nav.reports,
-              signOut: dict.signOut,
-            }}
-            userLabel={userLabel}
-            badges={{
-              reports: pendingReports,
-              users: { count: usersTotal, tone: "info" },
-              groups: { count: groupsTotal, tone: "info" },
-            }}
-          />
+          <AdminNav {...nav} userLabel={userLabel} />
         </div>
       </header>
       {/* pb-28 clears the fixed mobile bottom bar; the reveal runs once a load. */}
@@ -143,6 +146,10 @@ export async function AdminShell({
         ) : null}
         {children}
       </main>
+      {/* Outside the header AND outside <main>: it is `fixed`, and both of
+          those would become its containing block (backdrop-filter / a
+          transform). */}
+      <AdminBottomBar {...nav} />
     </div>
   );
 }

@@ -18,12 +18,23 @@ import { SignOutButton } from "./SignOutButton";
 /**
  * Admin chrome navigation, mobile-first. One declared link set (NAV_ITEMS),
  * two renderings:
- * - sm and up: inline icon+label pills inside the header bar, plus the
- *   account cluster (who's signed in + sign out).
- * - below sm: a fixed bottom tab bar — four thumb-reachable destinations —
- *   while the header keeps only the logo + a compact sign-out. A bottom bar
- *   beats a hamburger for a tool operated one-handed all day: every screen is
- *   one tap, nothing is hidden behind a menu.
+ * - sm and up: `AdminNav` — inline icon+label pills inside the header bar,
+ *   plus the account cluster (who's signed in + sign out).
+ * - below sm: `AdminBottomBar` — a fixed bottom tab bar, four thumb-reachable
+ *   destinations, while the header keeps the logo and the environment switch.
+ *   A bottom bar beats a hamburger for a tool operated one-handed all day:
+ *   every screen is one tap, nothing is hidden behind a menu.
+ *
+ * THEY ARE TWO COMPONENTS BECAUSE THE BAR MAY NOT BE RENDERED INSIDE THE
+ * HEADER. It was, and `position: fixed` does not mean the viewport inside an
+ * ancestor that has a filter: the header is `backdrop-blur`, which makes it a
+ * containing block for fixed descendants, so `bottom-0` resolved to the
+ * HEADER's bottom edge — the bar sat across the top of the screen, at z-40
+ * over the header's z-30, painting out the logo and the environment switch.
+ * Every mobile screen in the panel was missing its primary control, and the
+ * bar looked deliberate enough there that it read as the design. `globals.css`
+ * carries the same warning about a transform on <main> for the same reason.
+ * Anything `fixed` belongs OUTSIDE both.
  *
  * Adding a tab is a single NAV_ITEMS entry.
  */
@@ -143,9 +154,15 @@ const NAV_ITEMS: { key: NavKey; href: string; icon: NavIcon }[] = [
   { key: "reports", href: "/reports", icon: Flag },
 ];
 
-export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Props) {
+/** The tabs this viewer may see, in declared order. Both renderings read it,
+ * so the desktop pills and the mobile bar can never list different places. */
+function visibleItems(visibleKeys?: readonly NavKey[]) {
   const visible = visibleKeys ? new Set(visibleKeys) : null;
-  const items = NAV_ITEMS.filter((i) => !visible || visible.has(i.key));
+  return NAV_ITEMS.filter((i) => !visible || visible.has(i.key));
+}
+
+export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Props) {
+  const items = visibleItems(visibleKeys);
   return (
     <>
       {/* Desktop: inline icon+label pills */}
@@ -183,52 +200,64 @@ export function AdminNav({ active, visibleKeys, labels, userLabel, badges }: Pro
         <SignOutButton label={labels.signOut} />
       </div>
 
-      {/* No mobile header sign-out. It used to stand here labelled, from
-          before the bottom bar carried one — and two sign-outs on one screen
-          cost the header the ~90px that pushed the ENVIRONMENT switch off the
-          side of a phone (the header does not wrap and the shell clips its
-          overflow), i.e. the panel's primary control was unreachable on mobile
-          so that a duplicate of a thumb-reach action could be seen twice. The
-          bottom bar's BottomSignOut is the mobile one. */}
-      {/* Mobile: fixed bottom tab bar.
-          Last cell is a sign-out action (not a navigation link), styled with a
-          leading border separator and rose accent so it never reads as another
-          tab. Operators reported the header sign-out was too easy to miss on
-          mobile, so the action is duplicated here within thumb reach. */}
-      <nav
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur sm:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="mx-auto flex max-w-lg items-stretch">
-          {items.map(({ key, href, icon: Icon }) => (
-            <Link
-              key={key}
-              href={href}
-              aria-current={active === key ? "page" : undefined}
+      {/* No mobile header sign-out: the bottom bar's BottomSignOut is the
+          mobile one, and two sign-outs on one row cost the header the ~90px
+          the ENVIRONMENT switch stands in (this row does not wrap and the
+          shell clips its overflow). */}
+    </>
+  );
+}
+
+/**
+ * Mobile: the fixed bottom tab bar. Rendered by AdminShell as a SIBLING of the
+ * header and of <main> — see the note at the top of this file for why it may
+ * not live inside either.
+ *
+ * The last cell is a sign-out action, not a navigation link: a leading border
+ * and the rose accent keep it from reading as another tab. It is the only
+ * sign-out on a phone.
+ */
+export function AdminBottomBar({
+  active,
+  visibleKeys,
+  labels,
+  badges,
+}: Omit<Props, "userLabel">) {
+  const items = visibleItems(visibleKeys);
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur sm:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="mx-auto flex max-w-lg items-stretch">
+        {items.map(({ key, href, icon: Icon }) => (
+          <Link
+            key={key}
+            href={href}
+            aria-current={active === key ? "page" : undefined}
+            className={cn(
+              "flex flex-1 flex-col items-center gap-1 pb-1.5 pt-2 text-[10px] font-medium transition-colors",
+              active === key ? "text-primary" : "text-muted-foreground",
+            )}
+          >
+            <span
               className={cn(
-                "flex flex-1 flex-col items-center gap-1 pb-1.5 pt-2 text-[10px] font-medium transition-colors",
-                active === key ? "text-primary" : "text-muted-foreground",
+                "relative flex h-7 w-14 items-center justify-center rounded-full transition-colors",
+                active === key ? "bg-primary/10" : "bg-transparent",
               )}
             >
-              <span
-                className={cn(
-                  "relative flex h-7 w-14 items-center justify-center rounded-full transition-colors",
-                  active === key ? "bg-primary/10" : "bg-transparent",
-                )}
-              >
-                <Icon className="size-[18px]" />
-                <NavBadge
-                  spec={normalizeSpec(badges?.[key])}
-                  active={active === key}
-                  variant="corner"
-                />
-              </span>
-              {labels[key]}
-            </Link>
-          ))}
-          <BottomSignOut label={labels.signOut} />
-        </div>
-      </nav>
-    </>
+              <Icon className="size-[18px]" />
+              <NavBadge
+                spec={normalizeSpec(badges?.[key])}
+                active={active === key}
+                variant="corner"
+              />
+            </span>
+            {labels[key]}
+          </Link>
+        ))}
+        <BottomSignOut label={labels.signOut} />
+      </div>
+    </nav>
   );
 }
