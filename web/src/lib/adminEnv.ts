@@ -36,6 +36,24 @@ export type AdminEnv = "prod" | "test";
 
 export const ADMIN_ENVS = ["prod", "test"] as const;
 export const ADMIN_ENV_COOKIE = "once_admin_env";
+/** A year — the operator picks an environment once and stays in it. */
+export const ADMIN_ENV_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+/**
+ * THE SWITCH IS A LINK, NOT A BUTTON. It used to be a client component posting
+ * a server action, which made the panel's primary control the one thing that
+ * needed a live JS bundle to work: a phone holding a page from an earlier
+ * deployment posts an action id the server no longer knows, and the tap does
+ * nothing at all — silently, since a rejected action has no UI. A plain GET
+ * that sets the cookie and sends the browser back is immune to that, works
+ * with no JS, and is a full reload, which is honest about what switching
+ * environment does (every screen and every count is re-read).
+ *
+ * It lives under `/api` because that is the one prefix the proxy passes
+ * straight through, so the route needs no locale segment and no link has to
+ * know which locale it is in.
+ */
+export const ADMIN_ENV_ROUTE = "/api/env";
+export const adminEnvHref = (to: AdminEnv) => `${ADMIN_ENV_ROUTE}?to=${to}`;
 /** Production is what an operator who has chosen nothing must be looking at. */
 export const DEFAULT_ADMIN_ENV: AdminEnv = "prod";
 

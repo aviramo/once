@@ -87,12 +87,20 @@ export async function AdminShell({
       />
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:gap-5 sm:px-6">
-          <Link href="/" className="flex shrink-0 items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
+          {/* THE HEADER GIVES AT THE WORDMARK, NEVER AT THE SWITCH. This row
+              does not wrap and the shell clips its overflow, so on a narrow
+              phone something has to yield: the branding is the one thing here
+              that says nothing an operator needs, so the link shrinks and its
+              text truncates while EnvSwitch stays `shrink-0`. The mark itself
+              never shrinks — it is the way home. */}
+          <Link href="/" className="flex min-w-0 items-center gap-2">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
               O
             </span>
-            <span className="flex items-baseline gap-1.5">
-              <span className="text-base font-bold tracking-tight">Once</span>
+            <span className="flex min-w-0 items-baseline gap-1.5">
+              <span className="truncate text-base font-bold tracking-tight">
+                Once
+              </span>
               <span className="hidden text-xs font-medium text-muted-foreground sm:inline">
                 {dict.dashboardTitle}
               </span>

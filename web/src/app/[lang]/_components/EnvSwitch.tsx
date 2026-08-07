@@ -1,11 +1,6 @@
-"use client";
-
-import { useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Globe, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AdminEnv } from "@/lib/adminEnv";
-import { setAdminEnv } from "../actions";
+import { adminEnvHref, type AdminEnv } from "@/lib/adminEnv";
 
 /**
  * The panel's PRIMARY control: which matching environment every screen is
@@ -17,11 +12,13 @@ import { setAdminEnv } from "../actions";
  * see which environment he is in without opening anything, from every screen,
  * and the test side is tinted so the answer is legible at a glance rather than
  * read off a label. It sits beside the logo (before the nav) for the same
- * reason — it outranks the destination.
+ * reason — it outranks the destination, and it is why the header yields at the
+ * wordmark rather than here when a phone runs out of width.
  *
- * `setAdminEnv` revalidates the whole layout, so switching repaints the nav
- * badges too; `router.refresh()` is what makes the current screen's server
- * components re-run with the new cookie.
+ * A plain `<a>` per cell, and therefore no client component at all: the switch
+ * is a GET to `/api/env` which sets the cookie and sends the browser back (see
+ * ADMIN_ENV_ROUTE). The cell that is already selected is a `<span>` — it is
+ * where you are, not somewhere to go — which also spends no tap on a reload.
  */
 
 type Props = {
@@ -30,19 +27,23 @@ type Props = {
 };
 
 const CELL =
-  "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold transition-colors disabled:opacity-60 sm:px-2.5";
+  "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold transition-colors sm:px-2.5";
 
 export function EnvSwitch({ env, labels }: Props) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-
-  function pick(next: AdminEnv) {
-    if (next === env || pending) return;
-    startTransition(async () => {
-      await setAdminEnv(next);
-      router.refresh();
-    });
-  }
+  const cells = [
+    {
+      value: "prod" as const,
+      label: labels.prod,
+      Icon: Globe,
+      on: "bg-background text-foreground shadow-sm",
+    },
+    {
+      value: "test" as const,
+      label: labels.test,
+      Icon: FlaskConical,
+      on: "bg-amber-500 text-white shadow-sm",
+    },
+  ];
 
   return (
     <div
@@ -55,36 +56,23 @@ export function EnvSwitch({ env, labels }: Props) {
           : "border-border bg-muted",
       )}
     >
-      <button
-        type="button"
-        onClick={() => pick("prod")}
-        disabled={pending}
-        aria-pressed={env === "prod"}
-        className={cn(
-          CELL,
-          env === "prod"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <Globe className="size-3.5" />
-        {labels.prod}
-      </button>
-      <button
-        type="button"
-        onClick={() => pick("test")}
-        disabled={pending}
-        aria-pressed={env === "test"}
-        className={cn(
-          CELL,
-          env === "test"
-            ? "bg-amber-500 text-white shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <FlaskConical className="size-3.5" />
-        {labels.test}
-      </button>
+      {cells.map(({ value, label, Icon, on }) =>
+        env === value ? (
+          <span key={value} aria-current="true" className={cn(CELL, on)}>
+            <Icon className="size-3.5" />
+            {label}
+          </span>
+        ) : (
+          <a
+            key={value}
+            href={adminEnvHref(value)}
+            className={cn(CELL, "text-muted-foreground hover:text-foreground")}
+          >
+            <Icon className="size-3.5" />
+            {label}
+          </a>
+        ),
+      )}
     </div>
   );
 }
