@@ -311,6 +311,7 @@
       "location": "Updated location",
       "focus": "Returned to the app",
       "find": "Searched for a match",
+      "find_empty": "Searched, nobody available",
       "ignore": "Skipped a profile",
       "cancel": "Cancelled a sent invite",
       "invite": "Invited a user to chat",

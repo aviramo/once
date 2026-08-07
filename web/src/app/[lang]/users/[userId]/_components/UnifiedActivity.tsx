@@ -90,6 +90,10 @@ export type UnifiedEntry = {
    * decides whether it belongs here at all, and whether it may be phrased
    * from their side. */
   aimedHere: boolean;
+  /** The search came back with nobody. The row names no person (there is
+   * none) and survives the "nothing to say" filter on its own: an empty pool
+   * is the news. */
+  foundNobody?: boolean;
   affected: AffectedUser[];
   location?: LocationDetail;
   profileChanges?: ProfileChange[];

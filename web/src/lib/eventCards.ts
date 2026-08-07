@@ -99,13 +99,70 @@ const PERSON_DIRECTED = new Set<string>([
 ]);
 
 /**
+ * THE BOARD THE ROW LEFT BEHIND — the last `page1` any of its RPC steps
+ * reported. `with` is whoever is standing on it and `state` is whether the
+ * board is actually HOLDING them; both are needed, because the field survives
+ * the person (see `targetsOf`).
+ */
+type BoardAfter = { state: string | null; who: string | null };
+
+function page1After(rawLog: unknown): BoardAfter | null {
+  if (!Array.isArray(rawLog)) return null;
+  let out: BoardAfter | null = null;
+  for (const step of rawLog) {
+    const task = (step as { task?: unknown })?.task;
+    if (typeof task !== "string" || !task.startsWith("rpc:")) continue;
+    const p1 = ((step as { data?: unknown })?.data as
+      | { page1?: { with?: unknown; state?: unknown } | null }
+      | undefined)?.page1;
+    if (!p1 || typeof p1 !== "object") continue;
+    out = {
+      state: typeof p1.state === "string" ? p1.state : null,
+      who: typeof p1.with === "string" ? p1.with.toLowerCase() : null,
+    };
+  }
+  return out;
+}
+
+/** page1 states in which the board is genuinely HOLDING the person it names.
+ * `locked` is the trap: it is a shut board that still carries the id of
+ * whoever was last on it, so a `find` that came back empty reads exactly like
+ * a `find` that handed somebody over. */
+const PAGE1_LIVE = new Set<string>(["watching", "waiting", "chat"]);
+
+/**
+ * Keys for which the page1 OCCUPANT is the person the action was about.
+ *
+ * `page1.with` is not "the target" — it is "who is on the actor's board when
+ * the RPC returned", and only these actions put the target there or act on
+ * whoever already is: `find` is handed them, `invite` / `extend` are aimed at
+ * the occupant, `chat` is a message to them, `approve` turns the board into
+ * the chat with them.
+ *
+ * Every OTHER action empties the board or leaves it untouched, and reading
+ * `with` there names an innocent third party (measured 2026-08-07): an
+ * `ignore` re-seeds page1, so it named the person handed over NEXT and said
+ * he had been skipped; a `decline` answers an invitation on page2 and never
+ * touches page1, so it landed on whoever the decliner happened to be watching.
+ * For those, the target is what the server PUSHED, and nothing else.
+ */
+const PAGE1_OCCUPANT_IS_TARGET = new Set<string>([
+  "find",
+  "invite",
+  "extend",
+  "chat",
+  "approve",
+]);
+
+/**
  * WHO AN ACTION WAS AIMED AT, read off the RPC's own result.
  *
  * The request body does not carry it — the server picks the counterpart from
- * the actor's board — but the result does, in two places that agree: the board
- * the action landed on (`data.page1.with`) and everyone it pushed
- * (`data.notify[].user_id`). Both are taken, because `approve` notifies the
- * new partner AND whoever was cancelled by the match, and either of them is a
+ * the actor's board — but the result does, in two places: everyone it pushed
+ * (`data.notify[].user_id`), which is always the action's own doing, and the
+ * board it landed on (`data.page1.with`), which is the target only under the
+ * two conditions above. Both are taken, because `approve` notifies the new
+ * partner AND whoever was cancelled by the match, and either of them is a
  * person this action happened to.
  *
  * This is what the action's NAME cannot tell you, and the difference is not
@@ -115,24 +172,45 @@ const PERSON_DIRECTED = new Set<string>([
  * in the window, none to her, so "received an invitation" was nowhere to be
  * seen while three rows said he had invited someone.
  */
-function targetsOf(rawLog: unknown): Set<string> {
+function targetsOf(rawLog: unknown, key: string): Set<string> {
   const out = new Set<string>();
   if (!Array.isArray(rawLog)) return out;
   for (const step of rawLog) {
     const task = (step as { task?: unknown })?.task;
     if (typeof task !== "string" || !task.startsWith("rpc:")) continue;
     const data = (step as { data?: unknown })?.data as
-      | { page1?: { with?: unknown }; notify?: unknown[] }
+      | { notify?: unknown[] }
       | undefined;
     if (!data || typeof data !== "object") continue;
-    const on = data.page1?.with;
-    if (typeof on === "string") out.add(on.toLowerCase());
     for (const n of Array.isArray(data.notify) ? data.notify : []) {
       const to = (n as { user_id?: unknown })?.user_id;
       if (typeof to === "string") out.add(to.toLowerCase());
     }
   }
+  if (PAGE1_OCCUPANT_IS_TARGET.has(key)) {
+    const board = page1After(rawLog);
+    if (board?.who && board.state && PAGE1_LIVE.has(board.state))
+      out.add(board.who);
+  }
   return out;
+}
+
+/**
+ * A `find` THAT CAME BACK WITH NOBODY IS NOT A WATCH (user report 2026-08-07).
+ *
+ * `app_find` answers a dry pool by returning the board as it stands —
+ * `page1: {with: <the last occupant>, state: 'locked'}` — so the row looked
+ * identical to a successful one and the panel printed "started watching him"
+ * on the page of a person the actor had just been REFUSED by. The state is
+ * what tells the two apart, and it also gives the row its own sentence: the
+ * news is that the search found nobody, which is worth a line of its own on
+ * the actor's page (18 such finds in three days, every one of them empty).
+ */
+function foundNobody(key: string, rawLog: unknown): boolean {
+  if (key !== "find") return false;
+  const board = page1After(rawLog);
+  if (!board) return false;
+  return !(board.state && PAGE1_LIVE.has(board.state));
 }
 
 type ProfileEntry = { user_id?: string; name?: string };
@@ -448,7 +526,9 @@ export function buildEventCards(
     const byOther = !!actorId && actorId !== selfLower;
     const body = readBody(row.log);
     // For somebody else's row: did this action actually name THIS person?
-    const aimedHere = byOther && targetsOf(row.log).has(selfLower);
+    const aimedHere = byOther && targetsOf(row.log, row.key).has(selfLower);
+    // A search that was handed nobody: its own sentence, and never a person's.
+    const empty = foundNobody(row.key, row.log);
 
     let affected: AffectedUser[] = [];
     if (!byOther) {
@@ -498,17 +578,21 @@ export function buildEventCards(
       at: row.created_at,
       // Their action, said from this person's side once it is known to be
       // about them.
-      action: aimedHere
-        ? eventLabelByOther(dict, row.key)
-        : eventLabel(dict, row.key),
+      action: empty
+        ? eventLabel(dict, "find_empty")
+        : aimedHere
+          ? eventLabelByOther(dict, row.key)
+          : eventLabel(dict, row.key),
       rawKey: row.key,
       ok,
       statusLabel: res.label,
       actorId,
       byOther,
-      // Kind (1): the row is about a person, so its chips carry a face.
-      involvesPartner: PERSON_DIRECTED.has(row.key) || byOther,
+      // Kind (1): the row is about a person, so its chips carry a face. An
+      // empty search is about nobody, whoever ran it.
+      involvesPartner: !empty && (PERSON_DIRECTED.has(row.key) || byOther),
       aimedHere,
+      foundNobody: empty,
       affected,
       location,
       profileChanges,
@@ -530,6 +614,8 @@ export function buildEventCards(
       // still counts: it is something they tried to do to them.
       if (e.byOther) return e.aimedHere && PERSON_DIRECTED.has(e.rawKey);
       if (!e.ok) return true; // this user's own failures are always interesting
+      // A search that found nobody changes nothing, and that IS what it says.
+      if (e.foundNobody) return true;
       if (e.affected.length > 0) return true;
       if (e.location) return true;
       if (e.profileChanges && e.profileChanges.length > 0) return true;
