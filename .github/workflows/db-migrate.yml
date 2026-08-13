@@ -1,0 +1,81 @@
+name: Apply new database migrations
+
+# THE MIGRATION THAT WAS PUSHED IS THE MIGRATION THAT RUNS, AND NOTHING ELSE.
+#
+# A session that authors a migration cannot apply it: the container it runs in
+# holds only the service-role key, whose API (PostgREST) has no DDL at all, and
+# the environment's network policy blocks both api.supabase.com and port 5432.
+# So the runner applies it instead - GitHub's runner is not sandboxed, and the
+# one credential it needs is a repository secret.
+#
+# WHY NOT `supabase db push`: it applies every local migration the remote's
+# ledger does not list, and this project's local `supabase/migrations/` history
+# is known not to match what was actually applied (stated in CLAUDE.md). On a
+# live database that is a replay of years of history, not a deploy. This applies
+# ONLY the files the push itself added, and records each one so the two ledgers
+# converge from here on.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+  workflow_dispatch:
+    inputs:
+      files:
+        description: >-
+          Migration files to apply, space separated and repo-relative.
+          Empty = whatever the last commit on main added.
+        required: false
+        default: ""
+
+# One migration at a time. Two runs applying DDL to the same database is the
+# one thing this must never do, so a second push waits rather than cancelling
+# the first - a cancelled run leaves a half-recorded ledger.
+concurrency:
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      # Not a secret: it is the API subdomain, and it ships inside the published
+      # mobile bundle. The TOKEN is the credential.
+      PROJECT_REF: sjsblyumdlwckrshwxei
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, because the range being diffed is "what this
+          # push added", which needs the commit before it.
+          fetch-depth: 0
+
+      - name: Work out which migrations this push adds
+        id: pick
+        run: |
+          set -euo pipefail
+          MANUAL='${{ inputs.files }}'
+          if [ -n "$MANUAL" ]; then
+            FILES="$MANUAL"
+          else
+            BEFORE='${{ github.event.before }}'
+            # A first push, a force push, or a branch created here: there is no
+            # usable "before", so the head commit alone is the range.
+            if [ -z "$BEFORE" ] \
+               || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              RANGE='${{ github.sha }}^..${{ github.sha }}'
+            else
+              RANGE="$BEFORE..${{ github.sha }}"
+            fi
+            echo "range: $RANGE"
+            # Added or modified only: a deleted migration file is history being
+            # tidied, never something to run.
+            FILES=$(git diff --name-only --diff-filter=AM "$RANGE" -- supabase/migrations | sort | tr '\n' ' ')
+          fi
+          echo "files: ${FILES:-<none>}"
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+
+      - name: Apply them
+        if: steps.pick.outputs.files != ''
+        run: python3 .github/scripts/apply_migrations.py ${{ steps.pick.outputs.files }}
