@@ -7,7 +7,7 @@ import { GlyphSlot } from './GlyphSlot'
 // shape's three values from the strip that owns it rather than restating them
 // here — the mark's size, the gap under it and the word's rank (see `stack`).
 import { STRIP_GLYPH, STRIP_GLYPH_GAP, STRIP_LABEL } from './OptionStrip'
-import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, DISABLED_OPACITY, CARD_SHADOW } from '../tokens'
+import { SM, RADIUS, BUTTON_MIN_HEIGHT, TEXT, WEIGHT, DISABLED_OPACITY, PRESSED_OPACITY_BARE, CARD_SHADOW } from '../tokens'
 import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MID, INK_PRESSED, INK_DIM, INK_SUBTLE, LINE, PREMIUM } from '../colors'
 
 // App-wide button. Every pressable primary/secondary action goes
@@ -38,7 +38,7 @@ import { INK, INK_WASH, PAGE, SURFACE, WHITE, WHITE_SOFT, WHITE_STRONG, WHITE_MI
 // Exported for the one button that cannot compose <Button> (LoginForm's tiles).
 export const BUTTON_GLYPH = TEXT.md
 
-export type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost'
+export type Variant = 'primary' | 'secondary' | 'soft' | 'dark' | 'premium' | 'onPrimary' | 'onPrimaryGhost' | 'plain'
 type Size = 'lg' | 'md'
 // Accent tone layered on top of `primary`. Keeps the rest of the button
 // spec intact (shape, text color, pressed fade) and only swaps the fill.
@@ -156,7 +156,9 @@ export function Button({
     <View
       style={[
         styles.wrap,
-        styles.btn,
+        // THE LIFT IS THE TILE'S, so a variant with no ground casts nothing (see
+        // `plain`) — a shadow under nothing paints a smudge on the page.
+        skin.flat ? null : styles.btn,
         base.btn,
         skin.btn,
         toneSkin?.btn,
@@ -225,9 +227,9 @@ const styles = StyleSheet.create({
   wrap: { alignSelf: 'stretch' },
   // A BUTTON IS A TILE LYING ON THE PAGE, so it wears the app's one lift (user
   // directive 2026-08-03) — the same CARD_SHADOW a card, a list and a chip cast.
-  // Every variant of this component is FILLED, which is what earns it: a mark
-  // with no ground behind it (an OptionStrip option) casts nothing, because
-  // there is no tile there to lift.
+  // A FILL is what earns it: a mark with no ground behind it (an OptionStrip
+  // option, and this component's own `plain`) casts nothing, because there is no
+  // tile there to lift — which is why the lift is applied per variant.
   btn: { boxShadow: CARD_SHADOW },
   disabled: { opacity: DISABLED_OPACITY },
   // The label region of the button. Owns the size invariants (minHeight,
@@ -336,6 +338,8 @@ const VARIANT: Record<Variant, {
   // INK_PRESSED step (user directive 2026-07-25: pressing a button = dark purple);
   // the recessive ones step one shade darker so the press still reads.
   pressedBtn?: object
+  // This variant has NO GROUND, so it casts no lift (see styles.btn).
+  flat?: boolean
 }> = {
   // Disabled is a LIGHT INK fill carrying a FULL-STRENGTH purple label, not
   // the global opacity fade. Two separate problems that fade caused: the solid
@@ -353,6 +357,21 @@ const VARIANT: Record<Variant, {
     btn: { backgroundColor: PAGE },
     text: { color: INK_SUBTLE, fontWeight: WEIGHT.medium },
     pressedBtn: { backgroundColor: INK_DIM },
+  },
+  // A BUTTON WITH NO GROUND AT ALL (user directive 2026-08-07): no fill, no rim,
+  // no lift — the glyph and the word standing on the page itself, in the app's
+  // own tap target. It is `secondary` with the tile taken away, which is exactly
+  // what a quiet action beside the one purple offer needs: `secondary`'s PAGE
+  // fill is a shade off the page it lies on, so what actually drew the outline
+  // was the lift under it, and a barely-there tile reads as a frame around the
+  // words rather than as something to press. Same object as an OptionStrip
+  // option, down to the press fade — the ink answers the finger, because there
+  // is no surface here to flash.
+  plain: {
+    btn: {},
+    text: { color: INK_SUBTLE, fontWeight: WEIGHT.medium },
+    pressedBtn: { opacity: PRESSED_OPACITY_BARE },
+    flat: true,
   },
   soft: {
     btn: { backgroundColor: INK_SUBTLE },

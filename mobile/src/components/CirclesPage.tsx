@@ -1220,10 +1220,17 @@ function HubStart({ profile, bottomInset, onFind, lead }: {
               second on the empty page because the invitation above it is the one
               being recommended; with that invitation gone this is not the quiet
               half of a pair any more, it is the one thing the block is offering,
-              and the app's offer is always the filled button. */}
+              and the app's offer is always the filled button.
+
+              BESIDE THE PURPLE IT STANDS ON NOTHING (user directive 2026-08-07):
+              no tile and no rim, the glyph and the word straight on the page. The
+              tile it wore was `secondary`'s PAGE fill, which is the page's own
+              colour, so the only thing drawing it was the lift under it, and with
+              no fill inside for that lift to belong to it read as a frame around
+              the words. */}
           <Button
             label={t('circles.startFind')}
-            variant={hasRow ? 'primary' : 'secondary'}
+            variant={hasRow ? 'primary' : 'plain'}
             size="lg"
             iconStart={<SearchIcon color={hasRow ? WHITE : INK_SUBTLE} />}
             onPress={onFind}

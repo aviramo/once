@@ -379,6 +379,13 @@ export const DISABLED_OPACITY = 0.45
 // to INK_PRESSED as well; the fade alone is barely visible on a big disc.
 export const PRESSED_OPACITY = 0.85
 
+// THE press fade for a control WITH NO GROUND TO TINT — an OptionStrip option,
+// and a `plain` Button, which are the same object (a mark and a word standing on
+// the page itself). It is far deeper than the fade above because there is no fill
+// stepping to a darker shade underneath it: the ink IS the control, so the ink is
+// what has to answer the finger.
+export const PRESSED_OPACITY_BARE = 0.55
+
 // ── Paged lists ────────────────────────────────────────────────────────────
 // Rows a server-paged list asks for at a time (group browse / search).
 export const LIST_PAGE_SIZE = 20

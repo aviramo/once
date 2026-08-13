@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native'
 import { Text } from './AppText'
-import { XS, SM, ICON, TEXT, WEIGHT, DISABLED_OPACITY } from '../tokens'
+import { XS, SM, ICON, TEXT, WEIGHT, DISABLED_OPACITY, PRESSED_OPACITY_BARE } from '../tokens'
 import { INK, LINE } from '../colors'
 
 // ── THE shape: A MARK, WITH ONE WORD UNDER IT ──────────────────────────────
@@ -88,10 +88,6 @@ export type StripOption = {
    *  may be started until it lands. */
   disabled?: boolean
 }
-
-// How far an option fades under the finger. Named because it is MULTIPLIED with
-// the shut-door fade rather than just written into one style (see itemFadedPressed).
-const PRESS_OPACITY = 0.55
 
 // How far a marker is pulled back TOWARD its glyph from standing wholly clear of
 // it. Bare ink can sit nearer than a tile could without ever touching the glyph's
@@ -217,16 +213,16 @@ const styles = StyleSheet.create({
   // is free to wrap) and never the box.
   itemFill: { flex: 1, minWidth: 0 },
   itemHug: { flexShrink: 1, minWidth: 0 },
-  // The app's one press feedback for a control with no tile to tint: the same
-  // fade a RoundButton uses, since there is no surface here to flash.
-  itemPressed: { opacity: PRESS_OPACITY },
+  // The app's one press feedback for a control with no tile to tint, shared with
+  // a `plain` Button — there is no surface here to flash, so the ink answers.
+  itemPressed: { opacity: PRESSED_OPACITY_BARE },
   // Shut, or shut-but-answering — THE app's one shut-door fade, on the whole
   // option so the glyph and its word fade as one object rather than by a muted
   // colour per part.
   itemFaded: { opacity: DISABLED_OPACITY },
   // Both at once, multiplied: a shut door the finger is on is still a shut door,
   // and it must not brighten under the touch that opens its explanation.
-  itemFadedPressed: { opacity: DISABLED_OPACITY * PRESS_OPACITY },
+  itemFadedPressed: { opacity: DISABLED_OPACITY * PRESSED_OPACITY_BARE },
   // THE hairline, the app's one (`LINE`) — thin enough to separate the options
   // without drawing a grid over the surface they stand on.
   divider: {
