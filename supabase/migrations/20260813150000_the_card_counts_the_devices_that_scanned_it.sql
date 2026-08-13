@@ -106,7 +106,11 @@ as $$
          more_at        = coalesce(public.scan_devices.more_at,       excluded.more_at);
 $$;
 
+-- The revoke takes EXECUTE away from PUBLIC, and the service role holds it
+-- through PUBLIC like anybody else, so the grant is what leaves the site's own
+-- route handler able to call this at all.
 revoke execute on function public.app_scan_seen(text, text, text) from public, anon, authenticated;
+grant execute on function public.app_scan_seen(text, text, text) to service_role;
 
 -- The panel's block. A separate RPC from `admin_dashboard_metrics` because that
 -- one is bounded by the environment switch and scoped to a manager's own users,
@@ -155,3 +159,4 @@ as $$
 $$;
 
 revoke execute on function public.admin_scan_metrics() from public, anon, authenticated;
+grant execute on function public.admin_scan_metrics() to service_role;
