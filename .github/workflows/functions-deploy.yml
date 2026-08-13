@@ -1,0 +1,113 @@
+name: Deploy edge functions
+
+# THE FUNCTION A PUSH CHANGES IS THE FUNCTION THAT DEPLOYS.
+#
+# Same reason as db-migrate.yml: a session cannot deploy from its own container
+# (the Supabase CLI needs an account token, and the host it talks to is blocked
+# by the environment's network policy), so the runner does it with the token
+# already sitting in the repository's secrets.
+#
+# It was safe to turn this on because the check that ran first
+# (functions-check.yml, run 1) downloaded both live functions and found them
+# IDENTICAL to the repo. That is the fact this workflow rests on: pushing the
+# repo over production reverts nothing, because the repo IS production. The
+# drift step below re-proves it on every run and prints what it finds, so the
+# day that stops being true it is in the log rather than in the behaviour of
+# the app.
+#
+# WHICH functions deploy: the ones whose own directory changed, plus BOTH of
+# them whenever a shared module at the root of supabase/functions/ changed -
+# global.ts, tools.ts, log.ts and user.ts are imported by app and ext alike, so
+# a change there that deployed only one of them would leave the other running
+# against a module it no longer shares.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+  workflow_dispatch:
+    inputs:
+      functions:
+        description: "Function slugs to deploy, space separated. Empty = whatever the last commit changed."
+        required: false
+        default: ""
+
+concurrency:
+  group: functions-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT_REF: sjsblyumdlwckrshwxei
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Work out which functions this push touches
+        id: pick
+        run: |
+          set -euo pipefail
+          MANUAL='${{ inputs.functions }}'
+          if [ -n "$MANUAL" ]; then
+            echo "functions=$MANUAL" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          BEFORE='${{ github.event.before }}'
+          if [ -z "$BEFORE" ] \
+             || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            RANGE='${{ github.sha }}^..${{ github.sha }}'
+          else
+            RANGE="$BEFORE..${{ github.sha }}"
+          fi
+          CHANGED=$(git diff --name-only "$RANGE" -- supabase/functions)
+          echo "changed:"; echo "$CHANGED"
+          FNS=""
+          # A shared module at the root: both functions import it.
+          if echo "$CHANGED" | grep -qE '^supabase/functions/[^/]+$'; then
+            FNS="app ext"
+          else
+            for fn in app ext; do
+              if echo "$CHANGED" | grep -q "^supabase/functions/$fn/"; then
+                FNS="$FNS $fn"
+              fi
+            done
+          fi
+          echo "functions:${FNS:- <none>}"
+          echo "functions=$FNS" >> "$GITHUB_OUTPUT"
+
+      - name: What is live, before anything is pushed over it
+        if: steps.pick.outputs.functions != ''
+        run: |
+          set -uo pipefail
+          for fn in ${{ steps.pick.outputs.functions }}; do
+            supabase functions download "$fn" --project-ref "$PROJECT_REF" \
+              || echo "::warning::could not download $fn to compare"
+          done
+          if git diff --quiet -- supabase/functions; then
+            echo "no drift: what is deployed matches this repo"
+          else
+            echo "::warning::the deployed source differs from the repo - the diff being deployed over is:"
+            git --no-pager diff --stat -- supabase/functions
+            git --no-pager diff -- supabase/functions | head -200
+          fi
+          # Put the repo back: the download wrote the LIVE source over the
+          # checkout, and the checkout is what is about to be deployed.
+          git checkout -- supabase/functions
+
+      - name: Deploy
+        if: steps.pick.outputs.functions != ''
+        run: |
+          set -euo pipefail
+          for fn in ${{ steps.pick.outputs.functions }}; do
+            echo "::group::deploy $fn"
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+            echo "::endgroup::"
+          done

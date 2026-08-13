@@ -1,3 +1,6 @@
+// Deployed by .github/workflows/functions-deploy.yml on every push that
+// touches supabase/functions/ - this module is shared by app and ext, so a
+// change here deploys both.
 import Log from "./log.ts";
 
 declare global {
