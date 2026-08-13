@@ -146,56 +146,52 @@ export async function setUserHearts(
 }
 
 /**
- * Move users between the two matching environments.
+ * Move users between the matching environments.
  *
- * `users.is_test` partitions the matching pool: a test user is matchable ONLY
- * with other test users and a normal user ONLY with normal users, enforced by
- * a single unconditional clause in public.others() (the sole candidacy
- * chokepoint). The flag is one set-based UPDATE for the whole selection — no
- * RPC and no per-user loop.
+ * WRITING `is_test` HERE DID NOTHING, SILENTLY. Since the three-world
+ * migration (2026-08-13) the world an account lives in is `users.env`, and
+ * `is_test` is DERIVED from it: `_users_env_stamp`, a BEFORE trigger on
+ * `users`, ends with `NEW.is_test := (NEW.env <> 'il')` on every insert and
+ * every update. So this function's old set-based `update({is_test})` was
+ * overwritten inside the same statement that made it, returned no error, and
+ * left the account exactly where it was - which is why an operator could press
+ * the toggle, see it succeed, and watch the user stay in production. The same
+ * was true of the owned-group update: `groups.is_test` is stamped from the
+ * owner by `_group_stamp_is_test`.
  *
- * Flipping it moves the user across the boundary, so any live link they hold
- * may now straddle the two pools. Both pages are released afterwards:
- * app_admin_release_page1/2 are state-aware and repair the counterparty
- * (detach from the watched user's viewer array, close a pending invite, end a
- * chat, kick viewers, refund held hearts), so nothing dangles. A failed
- * teardown is non-fatal — the flag itself is already committed and is what
- * governs future matching.
+ * `app_admin_set_env` is the one supported way, and it is not a bare UPDATE:
+ * it releases both boards through the admin RPCs that repair the counterparty
+ * (a live watch, a pending invitation or an open chat may never straddle two
+ * worlds - that is what public.others() partitions to prevent), moves the
+ * circles the account OWNS with it, and re-stamps `data.env_locked_at` so no
+ * later GPS fix can undo the decision. Everything the old body did by hand, in
+ * one transaction that cannot half-apply.
  *
- * Groups they OWN move with them. Since 20260727120000 the partition also
- * covers communities, and a group carries its own `groups.is_test` (stamped
- * from its creator) because it cannot be derived from the owner — five legacy
- * groups have none. Leaving the groups behind would strand them on the far side
- * of the boundary from their owner: the owner could no longer find their own
- * group in search, and members on the new side could not redeem its code.
- * Membership rows need no fixing — they are edges, and both endpoints are now
- * partition-checked on every future write.
+ * WHICH world a test user goes to is `dev`: the Hebrew test cast and the
+ * developer's own devices. `review` is the App Store reviewers' world and is
+ * not something a panel toggle should drop somebody into. Untoggling returns
+ * the account to `il`, production.
+ *
+ * One call per user rather than one statement for the selection: the RPC is
+ * per-account by nature (it releases that account's boards), and a failure on
+ * one must not silently take the rest of a bulk selection with it.
  */
 async function flipTest(
   admin: ReturnType<typeof createSupabaseAdmin>,
   ids: string[],
   value: boolean,
 ): Promise<{ ok: boolean; error?: string }> {
-  const { error } = await admin
-    .from("users")
-    .update({ is_test: value })
-    .in("user_id", ids);
-  if (error) return { ok: false, error: error.message };
-  // Owned groups follow the owner across the boundary. Non-fatal on failure for
-  // the same reason as the page teardown below: the user flag is already
-  // committed and is what governs matching.
-  const { error: groupError } = await admin
-    .from("groups")
-    .update({ is_test: value })
-    .in("owner_id", ids);
-  if (groupError) console.warn("[flipTest] owned-group partition flip failed:", groupError.message);
+  const env = value ? "dev" : "il";
   for (const id of ids) {
-    try {
-      await admin.rpc("app_admin_release_page1", { p_user_id: id });
-      await admin.rpc("app_admin_release_page2", { p_user_id: id });
-    } catch {
-      /* non-fatal: the partition is already in effect for future matching */
-    }
+    const { data, error } = await admin.rpc("app_admin_set_env", {
+      p_user_id: id,
+      p_env: env,
+    });
+    if (error) return { ok: false, error: error.message };
+    // The RPC answers with its own refusal in the body ('bad_env',
+    // 'not_found'); a 200 is not on its own a move.
+    const outcome = (data ?? null) as { error?: string } | null;
+    if (outcome?.error) return { ok: false, error: outcome.error };
   }
   return { ok: true };
 }
