@@ -44,6 +44,11 @@ def query(sql: str):
         headers={
             "Authorization": f"Bearer {TOKEN}",
             "Content-Type": "application/json",
+            # Named on purpose. urllib's default ("Python-urllib/3.x") is
+            # refused by the edge in front of the Management API before the
+            # request reaches Supabase at all - a Cloudflare 403, error code
+            # 1010, which reads like a rejected token and is not one.
+            "User-Agent": "once-db-migrate/1.0 (+https://github.com/aviramo/once)",
         },
         method="POST",
     )
