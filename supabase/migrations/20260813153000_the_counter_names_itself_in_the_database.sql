@@ -21,3 +21,8 @@ comment on column public.scan_devices.notified_at is
   'FIRST press of "tell me when there is an iPhone version", which stands in the store button''s place on an iPhone.';
 comment on column public.scan_devices.more_at is
   'FIRST press of the link out to the site.';
+
+comment on function public.app_scan_seen(text, text, text) is
+  'The scan page says a device is here, or that it pressed something. One round trip: insert, or touch the row that device already has. The platform and every press stamp are sticky, so nothing a repeat visit does can overwrite what the first one recorded.';
+comment on function public.admin_scan_metrics() is
+  'The panel''s scan block. Every figure counts DEVICES, never presses: how many of the people who scanned went on to press this.';
