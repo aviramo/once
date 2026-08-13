@@ -657,44 +657,75 @@ export function useChipPadding(outlined = false, height = CHIP_HEIGHT) {
 // The chip's own row gap is cancelled as the box closes (`marginEnd`): a gap
 // standing between a zero-width box and the readout is a gutter the tile pays
 // for a block that is not there.
+//
+// THE PIN IS THE ROW'S WHOLE BOX, AND IT IS PINNED A SLIVER WIDE (user report
+// 2026-08-07, a physical device; the emulator never showed it). `width` came
+// back from a LAYOUT, so it is rounded to the device's pixel grid and can land
+// a fraction UNDER what the row's content actually measured. Handed back as an
+// explicit `width` it is a box that is very slightly too small: the label is
+// the one shrinkable item in the row, so the breaker takes the deficit out of
+// it and the block comes back A LINE TALLER than the tile it closed out of.
+// `PIN_SLOP` gives that fraction back — the row is anchored at the box's START
+// edge and clipped at its end, so a sliver of slack is invisible at every point
+// of the run — and the HEIGHT is pinned beside it, so whatever the content does
+// inside the closing box, the tile it stands in cannot change height. THE
+// MOVEMENT IS HORIZONTAL AND NOTHING ELSE.
+const PIN_SLOP = 1
+const PIN_INIT = { w: 0, h: 0 }
+
 function LeadClip({ collapsed, children }: { collapsed: boolean; children: React.ReactNode }) {
   const progress = useSharedValue(collapsed ? 0 : 1)
   const [clipping, setClipping] = useState(collapsed)
-  const [width, setWidth] = useState(0)
+  const [box, setBox] = useState(PIN_INIT)
   const settled = useRef(false)
+  // AND THE PIN IS RELEASED BY THE RUN THAT OWNS IT, FINISHED OR NOT. An
+  // opening interrupted mid-flight used to leave `clipping` true for good —
+  // i.e. the row pinned to that rounded width for the rest of the card's life,
+  // which is the same line-taller tile, standing in the SETTLED state where a
+  // user can screenshot it. The generation is what keeps that safe: a release
+  // from a run that has already been replaced (a re-collapse) is dropped, so
+  // the block can never unpin in the middle of closing.
+  const run = useRef(0)
+  const release = useCallback((id: number) => {
+    if (id === run.current) setClipping(false)
+  }, [])
   useEffect(() => {
     if (!settled.current) {
       settled.current = true
       return
     }
+    const id = ++run.current
     if (collapsed) {
       // Clip FIRST, animate on the next commit: the width the run is measured
       // against has to be committed to the style before anything moves.
       setClipping(true)
     } else {
-      progress.value = withTiming(1, undefined, finished => {
+      progress.value = withTiming(1, undefined, () => {
         'worklet'
-        if (finished) runOnJS(setClipping)(false)
+        runOnJS(release)(id)
       })
     }
-  }, [collapsed])
+  }, [collapsed, release])
   useEffect(() => {
-    if (collapsed && clipping && width > 0) progress.value = withTiming(0)
-  }, [collapsed, clipping, width])
+    if (collapsed && clipping && box.w > 0) progress.value = withTiming(0)
+  }, [collapsed, clipping, box.w])
   const clip = useAnimatedStyle(() => {
     if (!clipping) return { width: undefined, marginEnd: 0 }
     const p = progress.value
-    return { width: width * p, marginEnd: -SM * (1 - p) }
-  }, [clipping, width])
+    // The BOX's own width, never the pinned row's: the slop exists to keep the
+    // content off the breaker, and the tile must still end where the block
+    // measured.
+    return { width: box.w * p, marginEnd: -SM * (1 - p) }
+  }, [clipping, box.w])
   return (
     <Animated.View style={[styles.leadClip, clip]}>
       <View
-        style={[styles.leadClipRow, clipping && { width, flexShrink: 0 }]}
-        // Measured only while unpinned: that is the width the tile actually
-        // gives this block, and it is the one the close is run against.
+        style={[styles.leadClipRow, clipping && { width: box.w + PIN_SLOP, height: box.h, flexShrink: 0 }]}
+        // Measured only while unpinned: that is the box the tile actually gives
+        // this block, and it is the one the close is run against.
         onLayout={clipping ? undefined : e => {
-          const w = e.nativeEvent.layout.width
-          setWidth(cur => (Math.abs(cur - w) < 0.5 ? cur : w))
+          const { width: w, height: h } = e.nativeEvent.layout
+          setBox(cur => (Math.abs(cur.w - w) < 0.5 && Math.abs(cur.h - h) < 0.5 ? cur : { w, h }))
         }}
       >
         {children}
