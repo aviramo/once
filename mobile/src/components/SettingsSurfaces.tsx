@@ -282,8 +282,8 @@ function calcAge(birthDate: string): number {
 // menu is deleted, 2026-07-30.)
 //
 // Visibility is NOT credit-gated any more. The server used to auto-hide a
-// zero-credit wallet (the dispatcher's maybeAutoHide → app_lock2), so this
-// control routed an empty wallet to the buy picker instead of app/free2, which
+// zero-credit wallet (the dispatcher's maybeAutoHide → app_hide_me), so this
+// control routed an empty wallet to the buy picker instead of app/show_me, which
 // would have been undone in the same round trip. That auto-hide is gone
 // (2026-07-22): being broke keeps you visible on purpose — the invitation
 // you can't accept is the moment to buy.
@@ -306,7 +306,7 @@ function useVisibility() {
 
   const toggle = useCallback(() => {
     if (!isHidden) { setConfirmOpen(true); return }
-    run('app/free2')
+    run('app/show_me')
   }, [isHidden, run])
 
   // Who is watching drives two surfaces, and they ask different questions of
@@ -335,7 +335,7 @@ function useVisibility() {
         confirmLabel={confirm.confirmLabel}
         confirmIconStart={<EyeOffIcon color={WHITE} />}
         onCancel={() => { if (!busy) setConfirmOpen(false) }}
-        onConfirm={() => run('app/lock2')}
+        onConfirm={() => run('app/hide_me')}
         busy={busy}
       />
     ),

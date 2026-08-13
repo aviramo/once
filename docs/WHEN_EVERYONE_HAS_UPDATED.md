@@ -87,6 +87,7 @@ order by calls_project, 1;
 | `location_custom` בתוך `make_profile` | הבילד עם בורר המיקום המוקלד |
 | `app/buy_extra` + סט החבילות {3,10,50} | הבילד עם שורת ההפניה. **שני הפריטים האלה נפתרים יחד** |
 | `app/bug_report` | הבילד עם שורת התמיכה, **ורק אחרי שקראת את השורות הקיימות ב-`bug_reports`** — הן נתוני משתמשים |
+| ארבעת השמות הישנים `app/clear1`, `app/clear2`, `app/free2`, `app/lock2` | הבילד שפונה לשמות החדשים (`clear_watch` / `clear_invite` / `show_me` / `hide_me`). מוחקים את `renamedKeys` ב-`supabase/functions/app/index.ts` ואת ארבע פונקציות העטיפה ב-DB. הלוג שומר את הנתיב כפי שנשלח, אז שאילתה אחת אומרת אם נשאר מישהו |
 
 ---
 

@@ -555,7 +555,7 @@ select id, name, owner_id from groups where invite_code = '<CODE>';  -- חייב
 - מצופה: `app/start` הראשון מחזיר `page2` ל-`{state:'free',profiles:[]}` — המשתמש שוב גלוי.
 
 **AUTH-12 · הסתרה מפורשת נשמרת בין התחברויות**
-- קדם: המשתמש הסתיר את עצמו בהגדרות (`lock2`, בלי `message`).
+- קדם: המשתמש הסתיר את עצמו בהגדרות (`hide_me`, בלי `message`).
 - מצופה: אחרי יציאה+חזרה הוא **נשאר** מוסתר.
 
 **AUTH-13 · יציאה בזמן שיחה פעילה**
@@ -933,7 +933,7 @@ select jsonb_array_elements(relations->'page2'->'profiles')->>'user_id' from use
 - מצופה: בלתי אפשרי — נמען נעול להזמנה אחת; השני מקבל `invite-fail`.
 
 **INV-22 · כרטיס הזמנה מתה (`missed`/`fail`)**
-- מצופה: מוצג עם הסבר מגונדר לפי מין שני הצדדים, וכפתור יחיד שמנקה (`free2`/`clear1`) ומחזיר את המשתמש לזמינות.
+- מצופה: מוצג עם הסבר מגונדר לפי מין שני הצדדים, וכפתור יחיד שמנקה (`show_me`/`clear_watch`) ומחזיר את המשתמש לזמינות.
 
 **INV-23 · כפתור חזור על הזמנה מתה**
 - מצופה: נבלע (לא סוגר את האפליקציה, לא מוריד את הכרטיס בלי לנקות בשרת).
@@ -1127,7 +1127,7 @@ select jsonb_array_elements(relations->'page2'->'profiles')->>'user_id' from use
 - מצופה: `app/leave`; שני הצדדים יוצאים מהצ'אט; הצד השני מקבל פוש `left` + כרטיס "השיחה הסתיימה"; נוצרת הגבלת 14 יום; החזר קרדיט **לא** מתבצע.
 
 **END-02 · הצד השני סיים**
-- מצופה: כרטיס "יצא/ה מהשיחה" עם כפתור המשך (`clear1`), ואז חזרה לחיפוש.
+- מצופה: כרטיס "יצא/ה מהשיחה" עם כפתור המשך (`clear_watch`), ואז חזרה לחיפוש.
 
 **END-03 [P0] · חסימה**
 - מצופה: `app/block`; הזוג נחסם לנצח; אין דרך לראות זה את זה שוב; השיחה נסגרת בשני הצדדים.
@@ -1156,10 +1156,10 @@ select jsonb_array_elements(relations->'page2'->'profiles')->>'user_id' from use
 - מצופה: `app/remove` מוציא צופה מהרשימה; הצופה מקבל כרטיס "כבר לא זמין/ה לך" + פוש `removed`; הגבלת יום.
 
 **END-10 · הסתרה מוציאה את כל הצופים**
-- מצופה: `lock2` שולח `remove` לכל הצופים; מונה הצופים בהגדרות מתאפס.
+- מצופה: `hide_me` שולח `remove` לכל הצופים; מונה הצופים בהגדרות מתאפס.
 
 **END-11 · חזרה לזמינות**
-- מצופה: `free2` מחזיר לפול; אם הארנק ריק — השורה מפנה לפופאפ קרדיטים במקום להיכשל בשקט.
+- מצופה: `show_me` מחזיר לפול; אם הארנק ריק — השורה מפנה לפופאפ קרדיטים במקום להיכשל בשקט.
 
 ---
 
@@ -1422,7 +1422,7 @@ select jsonb_array_elements(relations->'page2'->'profiles')->>'user_id' from use
 - מצופה: פוש/לוגים/סנכרון תמונות רצים ב-`waitUntil`; זמן תשובה לפעולה טיפוסית נשאר קטן (מדוד ורשום מדידה).
 
 **SRV-05 · שער `requiresPresence`**
-- מצופה: `find`/`invite`/`add`/`approve` נחסמים לחסום; `clear1`/`clear2`/`decline`/`cancel`/`leave`/`free2`/`lock2`/`pause`/`logout`/`ignore` **לא** נחסמים.
+- מצופה: `find`/`invite`/`add`/`approve` נחסמים לחסום; `clear_watch`/`clear_invite`/`decline`/`cancel`/`leave`/`show_me`/`hide_me`/`pause`/`logout`/`ignore` **לא** נחסמים.
 
 **SRV-06 · שער `requiresProfile`**
 - מצופה: `invite`/`add` דורשים תמונה + ביו.
@@ -1620,7 +1620,7 @@ RPC אם הוא עובר דרך `others()` ואם הוא מזכיר `is_test` ב
 | `chat` (הודעות) | ✅ דורש התאמה קיימת | — | — |
 | `leave` / `block` / `remove` | ✅ יעד מהמשחק בלבד | — | — |
 | `extend` | ✅ | — | — |
-| `free2` / `lock2` / `pause` / `clear1` / `clear2` | ✅ עצמי | — | — |
+| `show_me` / `hide_me` / `pause` / `clear_watch` / `clear_invite` | ✅ עצמי | — | — |
 | `profile` / `account` / `age` / `range` / `location` | ✅ עצמי | — | — |
 | `logout` / `delete` | ✅ עצמי | — | AUTH-16 (סימון מחדש) |
 | `search_people` | ✅ מסונן (2026-07-27) | — | SRV-15 · COMM-02 |

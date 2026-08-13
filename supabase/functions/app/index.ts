@@ -34,6 +34,26 @@ const requiresPresence = ["find", "invite", "add", "approve"];
 // client never reaches here; this closes the loop for direct API calls.
 const requiresProfile = ["invite", "add"];
 
+// AN ACTION IS NAMED AFTER WHAT IT DOES, NEVER AFTER WHICH BOARD IT WROTE
+// (2026-08-09). `clear1`/`clear2`/`free2`/`lock2` were the last four names in
+// the system carrying a board number -- and page1/page2 are an internal
+// data-model term the `watch` table exists to retire, so those names were
+// pointing at something on its way out and meanwhile told a reader nothing
+// (the admin console had to translate BOTH clears to one sentence, because
+// their names could not tell them apart). The paths are on the wire and the
+// published build still posts them, so the old spellings keep working and are
+// simply CANONICALISED here, once, before anything downstream sees a key, so
+// that a name can never be half-renamed. The `log` row is the one place that
+// keeps the RAW path, because it is the record of the request rather than a
+// branch on it. Delete this map with its BACKWARD_COMPAT.md entry, once the
+// build that posts the new paths is the live floor.
+const renamedKeys: Record<string, string> = {
+  clear1: "clear_watch",   // I have read the card about the person I watched
+  clear2: "clear_invite",  // I have read the card about the invitation I got
+  free2: "show_me",        // show me to people again
+  lock2: "hide_me",        // hide me from everyone
+};
+
 // A deleted account's photos leave the PUBLIC `users` bucket the moment the
 // account goes (user directive 2026-07-31). Nothing used to remove them at all:
 // the row went and the face stayed reachable by URL forever. They move to the
@@ -148,14 +168,14 @@ function isSelfClockLapsed(u: unknown): boolean {
 }
 
 // Auto-hide on zero credits was REMOVED 2026-07-22 (credits rework). It used
-// to flip page2 to locked via app_lock2 the moment balance + extra hit 0, so a
+// to flip page2 to locked via app_hide_me the moment balance + extra hit 0, so a
 // user who ran out disappeared from the pool entirely — and therefore never
 // received the invitation that would have been the reason to pay. The economy
 // now works the other way round: a zero-credit user stays discoverable, the
 // incoming invite's accept button IS the paywall, and only an accept the
 // wallet could not cover (credits.unpaid_at, stamped in app_approve) takes
 // them out of others(). With a daily pool of 1 the old rule also hid anyone
-// who merely held a credit against a live invite. app_lock2 stays for the
+// who merely held a credit against a live invite. app_hide_me stays for the
 // EXPLICIT hide in settings.
 
 // Record the notification-presence signal into relations.push (drives the SQL
@@ -255,8 +275,14 @@ async function firePush(
 Deno.serve(async (req) => {
   const body = await Tools.getBody(req);
   const segments = new URL(req.url).pathname.split("/").filter(Boolean);
-  const key = segments[segments.indexOf("app") + 1];
-  const log = new Log(key, body, new User({ user_id: "unknown" }));
+  const path = segments[segments.indexOf("app") + 1];
+  // The dispatch and both gates below speak the new vocabulary, so a name can
+  // never be half-renamed -- but the LOG keeps the path exactly as it was
+  // requested (see renamedKeys). The row is the record of what the client
+  // actually sent, and it is the only way to tell whether an old build is
+  // still out there, which is what retires the shim.
+  const key = renamedKeys[path] ?? path;
+  const log = new Log(path, body, new User({ user_id: "unknown" }));
 
   try {
     // CORS preflight / empty ping
@@ -294,8 +320,8 @@ Deno.serve(async (req) => {
     // gate-aware mobile build already hides these CTAs while gated, so a
     // correctly-gated current client never reaches here; this closes the
     // loop for old builds and direct API calls. Teardown/exit actions
-    // (clear1/clear2, decline, cancel, leave, free2, lock2, pause, logout,
-    // ignore) are deliberately NOT gated — a gated user must still be able
+    // (clear_watch/clear_invite, decline, cancel, leave, show_me, hide_me,
+    // pause, logout, ignore) are deliberately NOT gated — a gated user must still be able
     // to clear a stale state and get out. availabilityState defaults to
     // 'available' when the key is absent, so onboarding users (no gate
     // computed yet) are unaffected.
@@ -356,7 +382,7 @@ Deno.serve(async (req) => {
       case "location":
       case "focus": {
         // Re-login reset: app_logout_cleanup stamps `signed_out` so we can
-        // distinguish a logout from an explicit lock2 hide. When a logged-out
+        // distinguish a logout from an explicit hide_me. When a logged-out
         // user comes back, their first /app/start (or /location, /focus) opens
         // the account back up. Explicit-hide users are `discoverable = false`
         // with no such stamp and stay hidden across re-logins — that is the
@@ -531,10 +557,10 @@ Deno.serve(async (req) => {
       case "invite":
       case "approve":
       case "decline":
-      case "clear1":
-      case "clear2":
-      case "free2":
-      case "lock2":
+      case "clear_watch":
+      case "clear_invite":
+      case "show_me":
+      case "hide_me":
       case "pause":
       case "add":
       case "cancel_add": {
@@ -1329,7 +1355,7 @@ Deno.serve(async (req) => {
         // also do what the row promised: be visible, and have someone looking.
         //
         // Two steps, both no-ops in the ordinary case:
-        //  • app_free2 only touches a page2 that is 'locked'. A fresh account is
+        //  • app_show_me only touches a page2 that is 'locked'. A fresh account is
         //    born 'free' (user.ts newRelations), so this is here for the row
         //    that got locked before the profile existed -- an older mobile build
         //    whose visibility row was still tappable, or a logout marker that no
@@ -1346,7 +1372,7 @@ Deno.serve(async (req) => {
         if (!wasBuilt && profileComplete(rpcUser ?? user.db.new)) {
           const built = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string } } };
           if (built.relations?.page2?.state === "locked") {
-            const freed = await Tools.rpc(log, "app_free2", { me_id: user.user_id });
+            const freed = await Tools.rpc(log, "app_show_me", { me_id: user.user_id });
             if (freed && !freed.error) rpcUser = freed.user;
           }
           const seedUser = (rpcUser ?? user.db.new) as { relations?: { page2?: { state?: string; profiles?: unknown[] } } };

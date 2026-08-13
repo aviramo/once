@@ -2895,7 +2895,7 @@ export default function HomePage() {
   // its own to do here, so it became a second, silent Skip.
   //
   // The DEAD card (missed/fail) is the opposite case and keeps the swipe: it
-  // asks nothing, so riding it off is exactly its Continue button (app/free2).
+  // asks nothing, so riding it off is exactly its Continue button (app/show_me).
 
   // Watching-state invite prompt lives in a popup raised by the hero heart,
   // NOT inside the MatchCard scroll (user directive 2026-07-25 â€” moved off the
@@ -3212,8 +3212,8 @@ export default function HomePage() {
   const waitingExpiresAt = displayedCardMode === 'waiting' ? inviteExpiresAt ?? null : null
   const watchEnded = isEndedState && !!watchMessageTitle
   const inviteEnded = !invitePendingInvite && !!inviteMessageTitle
-  const watchBack = () => runAction('app/clear1', 'ended-stop')
-  const inviteBack = () => runAction('app/free2', 'free2')
+  const watchBack = () => runAction('app/clear_watch', 'ended-stop')
+  const inviteBack = () => runAction('app/show_me', 'show_me')
   // The lapse fires from the clock, so it travels with it: the moment the strip's
   // countdown hits zero it asks the server to settle the invitation.
   const watchCountdown: CardCountdown | undefined = useMemo(() =>
@@ -3426,7 +3426,7 @@ export default function HomePage() {
   // somewhere sane rather than on a branch that does not exist.
   const closeInviteOverlay = useCallback(() => {
     if (invitePendingInvite) openRefuseConfirm()
-    else runAction('app/free2', 'free2')
+    else runAction('app/show_me', 'show_me')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invitePendingInvite])
   // Back button, step 2 (see the BackHandler effect). Pending raises the decline
@@ -3801,7 +3801,7 @@ export default function HomePage() {
                                       question by. Do not restore either.
                       The DEAD card (missed/fail) keeps the swipe: it asks nothing,
                       so riding it off IS its Continue button (commit 'dismiss',
-                      the default â†’ onClose â†’ app/free2). */}
+                      the default â†’ onClose â†’ app/show_me). */}
                   <OverlaySheet
                     open={inviteOverlayOpen}
                     // A PENDING INVITATION IS DRAGGED, AND THE DRAG ASKS (user
@@ -3986,16 +3986,16 @@ export default function HomePage() {
                       // the button's own spinner, until the server has answered â€”
                       // so the new state is expressed once, on a screen that has
                       // already stopped saying anything else.
-                      onPress={() => runAction('app/clear1', 'ended-stop', () => setMessageOpen(null))}
+                      onPress={() => runAction('app/clear_watch', 'ended-stop', () => setMessageOpen(null))}
                     />
                   ) : messageOpen === 'page2' ? (
                     <CardMessage
                       title={inviteMessageTitle}
                       description={inviteMessageDesc}
                       label={t('home.endedBack')}
-                      busy={busy && pendingKey === 'free2'}
+                      busy={busy && pendingKey === 'show_me'}
                       // Held by the answer, exactly as the page1 branch above is.
-                      onPress={() => runAction('app/free2', 'free2', () => setMessageOpen(null))}
+                      onPress={() => runAction('app/show_me', 'show_me', () => setMessageOpen(null))}
                     />
                   ) : null}
                 </BottomSheet>

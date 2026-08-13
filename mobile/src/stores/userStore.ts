@@ -366,7 +366,7 @@ function deriveCompat(relations: Pages | null | undefined) {
   let state: string | null = null
   if (page1?.state === 'free') state = null
   else if (page1?.state === 'locked') {
-    // locked without message = post-clear1 (or brand-new user); UI treats as
+    // locked without message = post-clear_watch (or brand-new user); UI treats as
     // null/HIDDEN so the search button shows. With a message, distinguish
     // user-initiated failures (fail) from things that happened to them (missed).
     if (!page1.message) state = null
@@ -378,7 +378,7 @@ function deriveCompat(relations: Pages | null | undefined) {
     : []
 
   // Match represents the other person whose card the home pane is showing.
-  // After clear1, page1 stays {state: 'locked'} with profile still attached
+  // After clear_watch, page1 stays {state: 'locked'} with profile still attached
   // server-side, but synthesized state goes to null — the card should slide
   // out. Gating match on state prevents the locked-no-message profile from
   // keeping the card mounted.
@@ -395,8 +395,8 @@ function deriveCompat(relations: Pages | null | undefined) {
     } as InviteCard
   } else if (page2?.state === 'locked' && page2.profile && page2.message) {
     // Dead-invite card surfaces only while the message is present. Once the
-    // user acknowledges via clear2 the message is gone and locked+profile is
-    // treated as plain "needs free2" (legacyInvite = [] empty watchers).
+    // user acknowledges via clear_invite the message is gone and locked+profile is
+    // treated as plain "needs show_me" (legacyInvite = [] empty watchers).
     const synthState: 'missed' | 'fail' =
       FAIL_MESSAGES.has(page2.message) ? 'fail' : 'missed'
     legacyInvite = {
@@ -571,7 +571,7 @@ export type Watching = {
    *  above. */
   others: number
   /** How many would actually be REMOVED if I hid right now, which is a
-   *  different question and has a different answer: app_lock2 walks the page2
+   *  different question and has a different answer: app_hide_me walks the page2
    *  array and nothing else, so a named person is in this number only when she
    *  is also watching me of her own accord, and a chat partner never is. The
    *  hide confirm states this one — "your N watchers will be removed and

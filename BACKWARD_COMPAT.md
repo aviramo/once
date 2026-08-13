@@ -31,6 +31,22 @@ See `CLAUDE.md` → "Backward compatibility with the deployed mobile app (produc
 
 ## Open entries
 
+### `/app/clear1`, `/app/clear2`, `/app/free2`, `/app/lock2` — the four board-numbered endpoint names
+
+- **Added:** 2026-08-09 (migration `20260809071500_an_action_is_named_after_what_it_does`)
+- **Reason:** They were the last four names in the system carrying a BOARD NUMBER. `page1`/`page2` are an internal data-model term that the `watch` table exists to retire (see the entry at the bottom of this file), so an endpoint named after one is a name that outlives what it points at — and meanwhile says nothing: `clear1` and `clear2` are two different actions with one word between them, which is why the admin console had to translate **both** of them to the same sentence ("dismissed a system message"). Renamed to what each one does: `clear_watch` (I have read the card about the person I watched), `clear_invite` (I have read the card about the invitation I got), `show_me`, `hide_me`. The two clears keep the DB's own verb — their whole effect is a `watcher_cleared_at` / `target_cleared_at` stamp, so the side is now said in the name instead of in a number.
+- **Old shape (kept alive):**
+  - `renamedKeys` in `supabase/functions/app/index.ts` maps the four old PATHS to the new keys **before anything downstream sees a key**, so the dispatch and both gates speak the new vocabulary and a name can never be half-renamed. The `log` row deliberately keeps the RAW path — it is the record of the request, and the only signal that says when this shim can go. The published build posts `/app/clear1` and `/app/free2` and is unaffected: the response shape is byte-identical.
+  - `public.app_clear1(uuid)` / `app_clear2(uuid)` / `app_free2(uuid)` / `app_lock2(uuid)` survive as one-line `SELECT public.app_<new>(me_id)` wrappers. They hold no behaviour; they exist so the migration and the function deploy may land in either order, and for any direct caller that predates the rename.
+  - `web/src/i18n/dictionaries/{he,en}.json` keeps the four old activity strings **alongside** the new ones, because `log` rows already written carry the old `key`. Those age out with the log purge; the wrappers do not.
+- **New shape (preferred):** `POST /app/clear_watch` → `app_clear_watch`, `/app/clear_invite` → `app_clear_invite`, `/app/show_me` → `app_show_me`, `/app/hide_me` → `app_hide_me`. The mobile build posts the new paths (`mobile/app/home.tsx`, `mobile/src/components/SettingsSurfaces.tsx`).
+- **Safe to remove after:** the mobile build that posts the new paths is the live floor. Note `/app/clear2` had **no mobile call site even before the rename** (the dead page2 card's Continue is `show_me`), so that one is already dead weight on the wire.
+- **How to remove:**
+  - `supabase/functions/app/index.ts` — delete the `renamedKeys` map and the `renamedKeys[path] ?? path` lookup, leaving `const key = segments[...]`.
+  - `DROP FUNCTION public.app_clear1(uuid), public.app_clear2(uuid), public.app_free2(uuid), public.app_lock2(uuid);` in a follow-up migration.
+  - Drop the four old keys from `web/src/i18n/dictionaries/{he,en}.json` **only** once no `log` row in the retained window carries them.
+- **Verify before removing:** `SELECT key, count(*) FROM log WHERE key IN ('clear1','clear2','free2','lock2') AND created_at > now() - interval '14 days' GROUP BY 1` — the log keeps the raw path, so a hit here is a client that pre-dates the rename and nothing else. Zero = safe.
+
 ### `/ext` still accepts the bare anon key when `EXT_SECRET` is unset
 
 - **Added:** 2026-08-03
