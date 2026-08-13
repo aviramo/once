@@ -191,7 +191,10 @@
 <script src="/store.js?v=1"></script>
 <script>
   // One screen, two states. Nothing else on this page branches.
-  if (window.OnceStore.isIOS) {
+  // `?ios=1` forces the iPhone state on any device: it is the only state most
+  // of us cannot reach, and the page is noindex, so there is nothing here for
+  // the query to leak into.
+  if (window.OnceStore.isIOS || /[?&]ios=1(&|$)/.test(location.search)) {
     document.getElementById('get').hidden = true;
     document.getElementById('ios').hidden = false;
     document.getElementById('notify').hidden = false;
