@@ -136,7 +136,9 @@
         "aDeletes": "Accounts deleted"
       },
       "hints": {
-        "scan": "Unique devices that opened the scan page, not the number of visits",
+        "scan": "Unique devices that opened the scan page, not the number of visits. Under each number, how many of those devices pressed",
+        "scanAndroid": "{download} pressed download · {more} opened the site",
+        "scanIos": "{notify} asked for an iPhone update · {more} opened the site",
         "extraShare": "{pct}% of users hold purchased credits"
       },
       "viewAll": "All users →",

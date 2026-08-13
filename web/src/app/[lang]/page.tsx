@@ -88,14 +88,26 @@ const EMPTY_ACTIVITY: Activity = {
 };
 
 /** The business card's counter, from `admin_scan_metrics`. One row per DEVICE
- * that opened /scan, split by what that device is — the two numbers the cards
- * are handed out to answer. It is NOT part of {@link Metrics}: an anonymous
- * visitor to a printed address has no account and no environment, so this is
- * the one block on the screen the header's environment switch does not move
- * and a manager's scope does not narrow. */
-type Scan = { android: number; ios: number };
+ * that opened /scan, and every figure beside it is a count of DEVICES too —
+ * how many of the people who scanned went on to press this, never how many
+ * presses there were. It is NOT part of {@link Metrics}: an anonymous visitor
+ * to a printed address has no account and no environment, so this is the one
+ * block on the screen the header's environment switch does not move and a
+ * manager's scope does not narrow. */
+type ScanRow = {
+  devices: number;
+  /** Pressed the store button. */
+  download: number;
+  /** Pressed "tell me when there is an iPhone version" — what stands in the
+   * store button's place on an iPhone, and the only thing an iPhone scan can
+   * press towards the app. */
+  notify: number;
+  /** Followed the link out to the site. */
+  more: number;
+};
+type Scan = { android: ScanRow; ios: ScanRow };
 
-const EMPTY_SCAN: Scan = { android: 0, ios: 0 };
+const EMPTY_ROW: ScanRow = { devices: 0, download: 0, notify: 0, more: 0 };
 
 const EMPTY: Metrics = {
   demographics: { men: 0, women: 0, avg_age: 0, os_ios: 0, os_android: 0 },
@@ -180,7 +192,14 @@ export default async function AdminDashboard({
     ...EMPTY_ACTIVITY,
     ...((activityData ?? {}) as Partial<Activity>),
   };
-  const scan: Scan = { ...EMPTY_SCAN, ...((scanData ?? {}) as Partial<Scan>) };
+  // Every platform is read through the same fallback, so a payload from an
+  // older RPC (or none at all, before the table exists) draws zeros instead of
+  // crashing the whole admin home.
+  const scanRaw = (scanData ?? {}) as Record<string, Partial<ScanRow>>;
+  const scan: Scan = {
+    android: { ...EMPTY_ROW, ...(scanRaw.android ?? {}) },
+    ios: { ...EMPTY_ROW, ...(scanRaw.ios ?? {}) },
+  };
 
   const nf = new Intl.NumberFormat(locale);
   const fmt = (n: number) => nf.format(n ?? 0);
@@ -222,13 +241,23 @@ export default async function AdminDashboard({
       {scope.kind === "admin" ? (
         <Section title={t.sections.scan} hint={t.hints.scan}>
           <CardGrid min="8.5rem">
+            {/* Under each number, what those same devices went on to press.
+                The pair differs by platform because the PAGE differs: an
+                Android scan is offered the store, an iPhone scan is offered
+                "tell me when" in its place, and both are offered the site. */}
             <Stat
               label={t.metrics.scanAndroid}
-              value={fmt(scan.android)}
+              value={fmt(scan.android.devices)}
+              hint={t.hints.scanAndroid
+                .replace("{download}", fmt(scan.android.download))
+                .replace("{more}", fmt(scan.android.more))}
             />
             <Stat
               label={t.metrics.scanIos}
-              value={fmt(scan.ios)}
+              value={fmt(scan.ios.devices)}
+              hint={t.hints.scanIos
+                .replace("{notify}", fmt(scan.ios.notify))
+                .replace("{more}", fmt(scan.ios.more))}
             />
           </CardGrid>
         </Section>

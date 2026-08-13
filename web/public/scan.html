@@ -181,7 +181,7 @@
       <span>עדכנו אותי כשיש אייפון</span>
     </a>
 
-    <a class="more" href="/">עוד על Once ←</a>
+    <a class="more" id="more" href="/">עוד על Once ←</a>
   </div>
 
 </div>
@@ -204,11 +204,12 @@
   }
 
   /* The counter. The cards are printed and handed out by hand, so the only
-     way to know whether they work is for this page to say that a device
-     opened it — and a DEVICE is what is counted, not a visit: the same person
-     coming back is the same card, and the id below is kept so the second
-     visit finds the first. `?ios=1` forces the iPhone STATE for a preview and
-     is deliberately not consulted here; what is reported is the real device.
+     way to know whether they work is for this page to say what happened on
+     it — a DEVICE opened it, and then that device pressed something. A device
+     is what is counted, not a visit: the same person coming back is the same
+     card, and the id below is kept so the second visit finds the first.
+     `?ios=1` forces the iPhone STATE for a preview and is deliberately not
+     consulted here; what is reported is the real device.
      Everything is wrapped: a counter may never be what breaks the page. */
   (function () {
     var KEY = 'once.scan.device';
@@ -229,24 +230,39 @@
       id = null;
     }
     var s = window.OnceStore;
-    var payload = JSON.stringify({
-      device: id,
-      platform: s.isIOS ? 'ios' : (s.isAndroid ? 'android' : 'desktop')
+    var platform = s.isIOS ? 'ios' : (s.isAndroid ? 'android' : 'desktop');
+
+    function report(action) {
+      var payload = JSON.stringify({ device: id, platform: platform, action: action });
+      try {
+        /* sendBeacon is the whole reason a press can be counted at all: it
+           survives the page being left for the store, the mail app or the
+           site. fetch with keepalive is the same promise where it is
+           missing. Neither is waited on — a press must never be delayed by a
+           counter. */
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/scan', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          });
+        }
+      } catch (e) {}
+    }
+
+    report('open');
+    /* The three things this page offers, each reported by the element that
+       offers it. Which of them a device can even reach is the page's own
+       state: an iPhone is shown 'notify' where an Android is shown the
+       store. */
+    var press = { get: 'download', notify: 'notify', more: 'more' };
+    Object.keys(press).forEach(function (elId) {
+      var el = document.getElementById(elId);
+      if (el) el.addEventListener('click', function () { report(press[elId]); });
     });
-    try {
-      /* sendBeacon survives the page being left for the store; fetch with
-         keepalive is the same promise where it is missing. */
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/scan', new Blob([payload], { type: 'application/json' }));
-      } else {
-        fetch('/api/scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          keepalive: true
-        });
-      }
-    } catch (e) {}
   })();
 </script>
 

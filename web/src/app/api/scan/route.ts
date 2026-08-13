@@ -31,6 +31,13 @@ const PLATFORMS = new Set(["android", "ios", "desktop"]);
  * arbitrary text into the table. */
 const DEVICE_RE = /^[A-Za-z0-9_-]{8,64}$/;
 
+/** What the page reports: the visit itself, and the three things it offers.
+ * `notify` is the iPhone state's "tell me when there is an iPhone version",
+ * which stands where the store button stands on Android. An unrecognised
+ * action is read as a plain visit rather than dropped — the row for the device
+ * is worth more than the verb. */
+const ACTIONS = new Set(["open", "download", "notify", "more"]);
+
 /** A stable id for a visitor whose browser kept nothing. Two phones behind one
  * Wi-Fi with the same phone model collide into a single device, which is the
  * under-count the panel's hint states; the pepper is what stops the digest
@@ -56,7 +63,7 @@ function platformFromUA(request: NextRequest): string {
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json().catch(() => null)) as
-      | { device?: unknown; platform?: unknown }
+      | { device?: unknown; platform?: unknown; action?: unknown }
       | null;
 
     const claimed = typeof body?.device === "string" ? body.device : "";
@@ -65,8 +72,15 @@ export async function POST(request: NextRequest) {
     const stated = typeof body?.platform === "string" ? body.platform : "";
     const platform = PLATFORMS.has(stated) ? stated : platformFromUA(request);
 
+    const asked = typeof body?.action === "string" ? body.action : "";
+    const action = ACTIONS.has(asked) ? asked : "open";
+
     const admin = createSupabaseAdmin();
-    await admin.rpc("app_scan_seen", { p_device: device, p_platform: platform });
+    await admin.rpc("app_scan_seen", {
+      p_device: device,
+      p_platform: platform,
+      p_action: action,
+    });
   } catch (err) {
     // Nothing is retried and nothing reaches the visitor: a lost scan is one
     // row missing from a marketing counter.
