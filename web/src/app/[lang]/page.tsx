@@ -237,8 +237,17 @@ export default async function AdminDashboard({
           total — an Android scan can install today and an iPhone scan is shown
           the "not yet on iPhone" state instead, so summing them would hide the
           one thing worth knowing. Admins only: it is a business figure about
-          the cards being handed out, not about anybody's circle. */}
-      {scope.kind === "admin" ? (
+          the cards being handed out, not about anybody's circle.
+
+          PRODUCTION ONLY (user directive 2026-08-13). Every other block on this
+          screen is drawn twice, once per world, because the same question has a
+          different answer in each. This one does not: the cards are real cards
+          handed to real people, there is one /scan and it counts whoever opened
+          it, so the same figure standing in the test view would be the real
+          world's number wearing the test world's frame. The switch therefore
+          does not scope this block — it decides whether it is on the screen at
+          all. */}
+      {scope.kind === "admin" && !envIsTest(env) ? (
         <Section title={t.sections.scan} hint={t.hints.scan}>
           <CardGrid min="8.5rem">
             {/* Under each number, what those same devices went on to press.
