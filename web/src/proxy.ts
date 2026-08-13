@@ -60,6 +60,37 @@ const FRIEND_PATH_RE = /^\/f\/([A-Za-z0-9]{4,16})\/?$/;
 // survives the auth round-trip.
 const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/map"];
 
+// Every page this site actually has, once the locale prefix and a trailing
+// slash are off the path. Anything else is a typo, a stale link or a probe,
+// and the answer to one of those is the HOME PAGE, never a 404: the only
+// address a visitor ever types or is handed by hand is the bare domain, so a
+// path we do not recognise means the user is looking for the site itself.
+// User directive 2026-08-13.
+//
+// The list is the routes under `src/app/[lang]/` and nothing else — it is NOT
+// PROTECTED_PREFIXES, which names two paths (/areas, /map) that have no route
+// yet and would 404 for the one visitor allowed to reach them. Add a page here
+// in the same change that adds its route.
+const KNOWN_PAGES = new Set(["/", "/login"]);
+const KNOWN_PREFIXES = ["/auth", "/users", "/groups", "/reports"];
+
+// The path with its locale prefix and its trailing slash removed, i.e. the
+// page being asked for. `/he/users/` and `/users` are one page; the root is
+// always "/". A locale-prefixed URL is a browser hitting the internal rewrite
+// target directly, which the caller must not prefix a second time — so the
+// locale it carried comes back with the page.
+function splitLocale(pathname: string): { locale: string | null; page: string } {
+  const firstSeg = pathname.split("/", 2)[1] ?? "";
+  const locale = hasLocale(firstSeg) ? firstSeg : null;
+  const rest = locale ? pathname.slice(1 + locale.length) || "/" : pathname;
+  return { locale, page: rest.length > 1 ? rest.replace(/\/+$/, "") || "/" : "/" };
+}
+
+function isKnownPage(page: string): boolean {
+  if (KNOWN_PAGES.has(page)) return true;
+  return KNOWN_PREFIXES.some((p) => page === p || page.startsWith(p + "/"));
+}
+
 function pickLocale(request: NextRequest): string {
   // The admin panel is Hebrew-only (there is no in-app language switcher).
   // An explicit NEXT_LOCALE cookie still wins — that is the seam a future
@@ -120,15 +151,35 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api") ||
     PUBLIC_FILE_RE.test(pathname)
   ) {
+    // A path with an extension is an ASSET request (an image, a script, a
+    // .html served straight from /public), and a missing asset must go on
+    // 404ing: bouncing one to the home page would hand a broken <script> or
+    // <img> a page of HTML and hide the breakage instead of showing it.
     return NextResponse.next();
+  }
+
+  const { locale: urlLocale, page } = splitLocale(pathname);
+
+  // An address this site does not have: go home rather than 404 (see
+  // KNOWN_PAGES). It runs before the session lookup, so a probe or a typo
+  // costs no auth round-trip and no DB query — and TEMPORARY on purpose: a
+  // 301/308 would be cached by the browser for a path that may become a real
+  // page later.
+  if (!isKnownPage(page)) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   // Already-localized URL (`/he/...`, `/en/...`, or bare `/he` / `/en`): the
   // browser hit the internal rewrite target directly, so don't run the locale
-  // prefix again (would double to `/he/he`). Let Next render `[lang]/...` as-is.
-  const firstSeg = pathname.split("/", 2)[1] ?? "";
-  if (hasLocale(firstSeg)) {
-    return NextResponse.next();
+  // prefix again (would double to `/he/he`). Let Next render `[lang]/...` as-is
+  // — rewriting only to drop a trailing slash it arrived with, which Next
+  // routes as a distinct, un-routed path under `skipTrailingSlashRedirect`.
+  if (urlLocale) {
+    const target = page === "/" ? `/${urlLocale}` : `/${urlLocale}${page}`;
+    if (target === pathname) return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = target;
+    return NextResponse.rewrite(url);
   }
 
   const { response: sessionResponse, user } = await updateSupabaseSession(request);
@@ -155,7 +206,7 @@ export async function proxy(request: NextRequest) {
     return data === true;
   };
 
-  if (pathname === "/") {
+  if (page === "/") {
     if (!(await panelAccess())) {
       const url = request.nextUrl.clone();
       url.pathname = "/index.html";
@@ -173,10 +224,10 @@ export async function proxy(request: NextRequest) {
   // too. A signed-in plain user is sent to /login?next=… exactly as a signed-out
   // one is, which is where the panel already tells them they are not an admin.
   const isProtected = PROTECTED_PREFIXES.some((p) =>
-    pathname === p || pathname.startsWith(p + "/"),
+    page === p || page.startsWith(p + "/"),
   );
   if (isProtected && !(await panelAccess())) {
-    const intended = pathname + request.nextUrl.search;
+    const intended = page + request.nextUrl.search;
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
@@ -186,10 +237,11 @@ export async function proxy(request: NextRequest) {
 
   const locale = pickLocale(request);
   const url = request.nextUrl.clone();
-  // Strip a bare "/" from the suffix so the rewrite target is `/he` instead
-  // of `/he/` — with `skipTrailingSlashRedirect: true` (next.config.ts) Next
-  // would otherwise treat `/he/` as a distinct, un-routed path and 404.
-  url.pathname = pathname === "/" ? `/${locale}` : `/${locale}${pathname}`;
+  // `page` is the path with its trailing slash already off, so the rewrite
+  // target is `/he` and never `/he/` — with `skipTrailingSlashRedirect: true`
+  // (next.config.ts) Next would otherwise treat `/he/` as a distinct,
+  // un-routed path and 404.
+  url.pathname = page === "/" ? `/${locale}` : `/${locale}${page}`;
   const rewrite = NextResponse.rewrite(url);
   for (const c of sessionResponse.cookies.getAll()) rewrite.cookies.set(c);
   return rewrite;
