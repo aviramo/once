@@ -11,6 +11,10 @@ const PUBLIC_FILE_RE = /\.(.*)$/;
 // both the slashless and trailing-slash forms map to it
 // (skipTrailingSlashRedirect keeps /download/ from being stripped).
 //
+// /scan is the business card's landing. Its address is PRINTED, so it is short,
+// extensionless and typed by hand as often as it is scanned, and it takes the
+// trailing-slash form for the same reason /download does.
+//
 // `/` is a special case: it shows the static marketing site for visitors
 // who are signed OUT, and the admin dashboard (the Next-rendered page) for
 // visitors who are signed IN. So `/` is NOT in STATIC_PAGES — the middleware
@@ -22,6 +26,8 @@ const STATIC_PAGES: Record<string, string> = {
   "/child-safety": "/child-safety.html",
   "/download": "/download.html",
   "/download/": "/download.html",
+  "/scan": "/scan.html",
+  "/scan/": "/scan.html",
 };
 
 // Referral landing: /i/<CODE> is the link a user shares from the app's invite
