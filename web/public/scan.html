@@ -106,12 +106,24 @@
     text-decoration:none;padding:8px;font-weight:500;
   }
 
-  /* iPhone: an honest dead end is better than a broken button */
+  /* iPhone: an honest dead end is better than a broken button. There is nothing
+     to install today, so what this state offers instead is the one thing that
+     still works: keep the card and come back to it. */
   .ios-note{
     background:var(--surface);border:1.5px solid var(--ground);
     border-radius:12px;padding:15px 16px;font-size:14.5px;line-height:1.55;color:var(--muted);
   }
   .ios-note strong{display:block;color:var(--ink);font-weight:700;font-size:16px;margin-bottom:5px}
+  .ios-note .keep{
+    margin-top:12px;padding-top:12px;border-top:1.5px solid var(--ground);
+    color:var(--ink);font-weight:500;
+  }
+  .ios-note .keep b{font-weight:700}
+  /* The iPhone state says more than the download does, so that one screen may
+     scroll. Centring is dropped with it: a flex box centred taller than the
+     viewport puts its own head out of reach. */
+  body.tall{overflow-y:auto}
+  body.tall .wrap{justify-content:flex-start}
   [hidden]{display:none!important}
 </style>
 </head>
@@ -157,8 +169,13 @@
 
     <!-- iPhone -->
     <div class="ios-note" id="ios" hidden>
-      <strong>אנחנו עוד לא באייפון.</strong>
-      Once זמינה כרגע באנדרואיד בלבד. השאירו כתובת ונעדכן אתכם ביום שהיא נפתחת לאייפון — זה קרוב.
+      <strong>עוד אי אפשר להוריד את Once לאייפון</strong>
+      Once נמצאת עכשיו בתהליך אישור בחנות של אפל, ואנחנו עובדים קשה כדי לזרז
+      אותו. ברגע שנקבל אישור היא תהיה כאן
+      <div class="keep">
+        <b>שמרו את כרטיס הביקור וסרקו אותו שוב בעוד כמה ימים.</b>
+        האנשים שנמצאים כאן עכשיו נמצאים כאן גם מחר, אז מה שיש כאן יחכה לכם
+      </div>
     </div>
     <a class="btn" id="notify" href="mailto:once.app.support@gmail.com?subject=%D7%A2%D7%93%D7%9B%D7%A0%D7%95%20%D7%90%D7%95%D7%AA%D7%99%20%D7%9B%D7%A9%D7%99%D7%A9%20%D7%90%D7%99%D7%99%D7%A4%D7%95%D7%9F" hidden>
       <span>עדכנו אותי כשיש אייפון</span>
@@ -178,6 +195,7 @@
     document.getElementById('get').hidden = true;
     document.getElementById('ios').hidden = false;
     document.getElementById('notify').hidden = false;
+    document.body.classList.add('tall');
   } else {
     document.getElementById('get').href = window.OnceStore.url();
   }

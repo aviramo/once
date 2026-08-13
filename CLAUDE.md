@@ -5,7 +5,7 @@ This file is the **operational contract** for the project: how to act, publish, 
 ## Reference docs (`docs/`)
 
 Aids for humans, never a source of truth — the code and migrations are. Rewrite them from the code when asked; never let one of them drive a code decision.
-- **`docs/APP_OVERVIEW.md`** — the app's explanation document (Hebrew): product, state machines, rules, server, client, site. Written for someone with no code access (a new person, or an external assistant like ChatGPT). The user asks for it to be refreshed periodically — on such a request, re-derive it from `HEAD` **plus the working tree**, keep its section structure, and update §16 ("what changed") + the version line in the header.
+- **`docs/תיעוד המערכת.md`** — the app's explanation document (Hebrew; was `APP_OVERVIEW.md` until 2026-08-05). **FUNCTIONAL, NOT TECHNICAL** (user directive 2026-08-05): what the app DOES, what the user sees, which rules decide what — **no code, no file names, no schema, no SQL, no RPC names**. A reader must be able to understand the whole product without opening a single source file. Written for someone with no code access (a new person, a partner, or an external assistant like ChatGPT). Its spine is the four central features, in this order: **זמן אמת · רק אחד · לו״ז הורים · מעגלים** (user directive 2026-08-05) — the same four the landing page is built on. The user asks for it to be refreshed periodically — on such a request, re-derive it from `HEAD` **plus the working tree** and the live DB, keep its section structure, and update the "what changed" section + the version line in the header. Numbers and rules stated in product terms (10 minutes, one credit a day, two photos) are welcome; mechanism is not.
 
 ## Operational autonomy
 
