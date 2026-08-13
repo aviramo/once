@@ -101,6 +101,7 @@
         "mapDesc": "Active users on the map, in real time"
       },
       "sections": {
+        "scan": "Business-card scans",
         "demographics": "Demographics",
         "credits": "Credits economy",
         "activity": "Activity"
@@ -112,6 +113,8 @@
         "avgAge": "Average age",
         "osIos": "iPhone",
         "osAndroid": "Android",
+        "scanAndroid": "Scans, Android",
+        "scanIos": "Scans, iPhone",
         "balanceTotal": "Total credit balance",
         "heldTotal": "Held credits",
         "extraTotal": "Total purchased credits",
@@ -133,6 +136,7 @@
         "aDeletes": "Accounts deleted"
       },
       "hints": {
+        "scan": "Unique devices that opened the scan page, not the number of visits",
         "extraShare": "{pct}% of users hold purchased credits"
       },
       "viewAll": "All users →",

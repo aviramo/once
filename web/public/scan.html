@@ -202,6 +202,52 @@
   } else {
     document.getElementById('get').href = window.OnceStore.url();
   }
+
+  /* The counter. The cards are printed and handed out by hand, so the only
+     way to know whether they work is for this page to say that a device
+     opened it — and a DEVICE is what is counted, not a visit: the same person
+     coming back is the same card, and the id below is kept so the second
+     visit finds the first. `?ios=1` forces the iPhone STATE for a preview and
+     is deliberately not consulted here; what is reported is the real device.
+     Everything is wrapped: a counter may never be what breaks the page. */
+  (function () {
+    var KEY = 'once.scan.device';
+    var id = null;
+    try {
+      id = localStorage.getItem(KEY);
+      if (!id) {
+        /* A device with no crypto.randomUUID is old enough that time plus a
+           random tail is unique enough for a marketing counter. */
+        id = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem(KEY, id);
+      }
+    } catch (e) {
+      /* Storage blocked (private mode, a locked-down browser): send nothing
+         and let the route identify the visitor its own way. */
+      id = null;
+    }
+    var s = window.OnceStore;
+    var payload = JSON.stringify({
+      device: id,
+      platform: s.isIOS ? 'ios' : (s.isAndroid ? 'android' : 'desktop')
+    });
+    try {
+      /* sendBeacon survives the page being left for the store; fetch with
+         keepalive is the same promise where it is missing. */
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/scan', new Blob([payload], { type: 'application/json' }));
+      } else {
+        fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true
+        });
+      }
+    } catch (e) {}
+  })();
 </script>
 
 </body>

@@ -87,6 +87,16 @@ const EMPTY_ACTIVITY: Activity = {
   deletes: 0,
 };
 
+/** The business card's counter, from `admin_scan_metrics`. One row per DEVICE
+ * that opened /scan, split by what that device is — the two numbers the cards
+ * are handed out to answer. It is NOT part of {@link Metrics}: an anonymous
+ * visitor to a printed address has no account and no environment, so this is
+ * the one block on the screen the header's environment switch does not move
+ * and a manager's scope does not narrow. */
+type Scan = { android: number; ios: number };
+
+const EMPTY_SCAN: Scan = { android: 0, ios: 0 };
+
 const EMPTY: Metrics = {
   demographics: { men: 0, women: 0, avg_age: 0, os_ios: 0, os_android: 0 },
   users: {
@@ -151,7 +161,7 @@ export default async function AdminDashboard({
   const env = await readAdminEnv();
 
   const admin = createSupabaseAdmin();
-  const [{ data: metricsData }, { data: activityData }, meRes] =
+  const [{ data: metricsData }, { data: activityData }, { data: scanData }, meRes] =
     await Promise.all([
       admin.rpc("admin_dashboard_metrics", {
         p_user_ids: scopedUserIds,
@@ -162,6 +172,7 @@ export default async function AdminDashboard({
         p_is_test: envIsTest(env),
         p_user_ids: scopedUserIds,
       }),
+      admin.rpc("admin_scan_metrics"),
       admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
     ]);
   const m = normalize(metricsData);
@@ -169,6 +180,7 @@ export default async function AdminDashboard({
     ...EMPTY_ACTIVITY,
     ...((activityData ?? {}) as Partial<Activity>),
   };
+  const scan: Scan = { ...EMPTY_SCAN, ...((scanData ?? {}) as Partial<Scan>) };
 
   const nf = new Intl.NumberFormat(locale);
   const fmt = (n: number) => nf.format(n ?? 0);
@@ -200,6 +212,27 @@ export default async function AdminDashboard({
           {t.updated.replace("{time}", updatedTime)}
         </p>
       </div>
+
+      {/* The printed card, above everything the app itself reports: this is
+          the step BEFORE an account exists, so it leads. Two numbers and no
+          total — an Android scan can install today and an iPhone scan is shown
+          the "not yet on iPhone" state instead, so summing them would hide the
+          one thing worth knowing. Admins only: it is a business figure about
+          the cards being handed out, not about anybody's circle. */}
+      {scope.kind === "admin" ? (
+        <Section title={t.sections.scan} hint={t.hints.scan}>
+          <CardGrid min="8.5rem">
+            <Stat
+              label={t.metrics.scanAndroid}
+              value={fmt(scan.android)}
+            />
+            <Stat
+              label={t.metrics.scanIos}
+              value={fmt(scan.ios)}
+            />
+          </CardGrid>
+        </Section>
+      ) : null}
 
       <Section title={t.sections.demographics}>
         <CardGrid min="8.5rem">
