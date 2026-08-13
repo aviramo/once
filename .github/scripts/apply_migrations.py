@@ -59,6 +59,14 @@ def query(sql: str):
     except urllib.error.HTTPError as err:
         detail = err.read().decode()
         print(f"::error::database refused the statement ({err.code}): {detail}")
+        # The two refusals that are about the credential rather than the SQL,
+        # named because neither message says which of them it is.
+        if err.code == 401:
+            print(
+                "::error::SUPABASE_ACCESS_TOKEN must be a personal access token"
+                " from the ACCOUNT page (it starts with sbp_), not a project"
+                " API key (the eyJ... JWT)"
+            )
         raise SystemExit(1)
 
 

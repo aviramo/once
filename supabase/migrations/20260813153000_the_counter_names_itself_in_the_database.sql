@@ -13,6 +13,10 @@ comment on column public.scan_devices.device_id is
   'The page''s own localStorage id, or a hash of IP + user-agent for a browser that keeps nothing. Neither of those inputs is stored.';
 comment on column public.scan_devices.platform is
   'What the device is, decided at the moment of the scan and never overwritten: android / ios / desktop.';
+comment on column public.scan_devices.first_seen_at is
+  'When this device scanned the card for the first time.';
+comment on column public.scan_devices.last_seen_at is
+  'The most recent open OR press. Moved by everything the device does; nothing else about the row is.';
 comment on column public.scan_devices.hits is
   'Opens only. A button press is not a new visit, so the gap between this and the row count is what says whether people come back to the card.';
 comment on column public.scan_devices.downloaded_at is
