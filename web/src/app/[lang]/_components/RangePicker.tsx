@@ -6,12 +6,18 @@ import { cn } from "@/lib/utils";
 import { RANGES, DEFAULT_RANGE, type Range } from "@/lib/range";
 
 /**
- * The period every activity figure on the dashboard is read against — a day, a
- * week, a month, or the whole history. It is a segmented pill next to the
- * section heading rather than a dropdown, because the four options are the
- * whole vocabulary and an operator compares them by tapping across: "5 this
- * week, 40 all time" is the reading, and a dropdown hides one number behind a
- * click every time.
+ * The period EVERY figure on the dashboard is read against — a day, a week, a
+ * month, or the whole history. It is a segmented pill rather than a dropdown,
+ * because the four options are the whole vocabulary and an operator compares
+ * them by tapping across: "5 this week, 40 all time" is the reading, and a
+ * dropdown hides one number behind a click every time.
+ *
+ * It stands in the HEADER beside the environment switch (user directive
+ * 2026-08-15), which is what the shape above is really for: it used to sit
+ * against the activity section's heading, where it read as that section's own
+ * filter, and it bounds the whole screen now. Same segmented pill, same four
+ * words — only the two selectors are together, and a section that is subject
+ * to the period no longer has to say so.
  *
  * The values and the parser live in `lib/range.ts`, not here: every export of
  * a `"use client"` module becomes a client reference in the server graph, so
@@ -45,7 +51,9 @@ export function RangePicker({
     <div
       role="group"
       className={cn(
-        "flex items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5",
+        // `shrink-0` for the same reason EnvSwitch has it: on a narrow phone
+        // the header yields at the wordmark, never at a selector.
+        "flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-muted p-0.5",
         pending && "opacity-70",
       )}
     >
@@ -56,7 +64,9 @@ export function RangePicker({
           onClick={() => pick(r)}
           aria-pressed={range === r}
           className={cn(
-            "rounded-md px-2 py-1 text-xs font-semibold transition-colors sm:px-2.5",
+            // Tighter than EnvSwitch's cell on a phone: four cells against its
+            // two, and the header holds both now.
+            "rounded-md px-1.5 py-1 text-xs font-semibold transition-colors sm:px-2.5",
             range === r
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",

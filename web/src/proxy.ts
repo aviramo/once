@@ -56,7 +56,17 @@ const FRIEND_PATH_RE = /^\/f\/([A-Za-z0-9]{4,16})\/?$/;
 // (handled separately below); these are the panel sub-routes. A signed-out
 // visit redirects to /login with `?next=<intended>` so the deep-link
 // survives the auth round-trip.
-const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/map"];
+const PROTECTED_PREFIXES = [
+  "/users",
+  "/groups",
+  "/areas",
+  "/reports",
+  "/map",
+  // The rows behind a dashboard tile. Every one of them is somebody's account,
+  // a pair of them, or a deleted person's archived profile — so it is a panel
+  // sub-route like the rest and never reachable signed out.
+  "/insight",
+];
 
 // Every page this site actually has, once the locale prefix and a trailing
 // slash are off the path. Anything else is a typo, a stale link or a probe,
@@ -70,7 +80,7 @@ const PROTECTED_PREFIXES = ["/users", "/groups", "/areas", "/reports", "/map"];
 // yet and would 404 for the one visitor allowed to reach them. Add a page here
 // in the same change that adds its route.
 const KNOWN_PAGES = new Set(["/", "/login"]);
-const KNOWN_PREFIXES = ["/auth", "/users", "/groups", "/reports"];
+const KNOWN_PREFIXES = ["/auth", "/users", "/groups", "/reports", "/insight"];
 
 // The path with its locale prefix and its trailing slash removed, i.e. the
 // page being asked for. `/he/users/` and `/users` are one page; the root is

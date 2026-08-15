@@ -42,7 +42,7 @@ type Spec = { shape: InsightShape; tone?: Tone };
  * number and the page behind it are stated once. A metric with no tone is the
  * neutral `idle` the Stat defaults to.
  */
-export const INSIGHT: Record<string, Spec> = {
+export const INSIGHT = {
   // Who is here — the population, split. Under a window these are the
   // accounts OPENED inside it.
   total: { shape: "person" },
@@ -75,20 +75,33 @@ export const INSIGHT: Record<string, Spec> = {
   extraTotal: { shape: "person", tone: "ok" },
   withExtra: { shape: "person" },
 
-  // Nobody's account: an anonymous device that opened a printed address or
-  // the home page. No environment and no manager scope reaches these.
-  scanAndroid: { shape: "device" },
-  scanIos: { shape: "device" },
+  // Nobody's account: an anonymous device that opened the home page. No
+  // environment and no manager scope reaches these, which is why the block is
+  // drawn in production only. Three tiles over one list — who came, and the
+  // two things there are to press once here.
   siteTotal: { shape: "device" },
-  siteAndroid: { shape: "device" },
-  siteIos: { shape: "device" },
-  siteDesktop: { shape: "device" },
-};
+  siteDownload: { shape: "device", tone: "ok" },
+  siteNotify: { shape: "device", tone: "busy" },
+  // `satisfies` rather than a `Record<string, Spec>` annotation: the keys stay
+  // LITERAL, so `InsightMetric` is the closed set of them and the dashboard's
+  // `t.metrics[metric]` lookup is checked at compile time. A tile added here
+  // with no label in the dictionary is a build error rather than a heading
+  // that says `aDeletes` on a live screen.
+} satisfies Record<string, Spec>;
 
 export type InsightMetric = keyof typeof INSIGHT;
 
 export function isInsightMetric(raw: string | undefined): raw is InsightMetric {
   return !!raw && Object.hasOwn(INSIGHT, raw);
+}
+
+/** The one way to read an entry. `satisfies` keeps the keys literal, which is
+ * the point of it, but it also keeps each VALUE at its own narrow type — so a
+ * bare `INSIGHT[m].tone` is a union half of whose members have no `tone` at
+ * all. Widening it back to `Spec` here means a call site asks for the tone
+ * once and gets `undefined` where a metric declares none. */
+export function insightSpec(metric: InsightMetric): Spec {
+  return INSIGHT[metric];
 }
 
 /** How many rows the screen will draw. Stated once: the RPC caps at it and the

@@ -8,6 +8,8 @@ import { readAdminEnv, envIsTest } from "@/lib/adminEnv";
 import { AdminNav, AdminBottomBar } from "./AdminNav";
 import { RealtimeRefresh } from "./RealtimeRefresh";
 import { EnvSwitch } from "./EnvSwitch";
+import { RangePicker } from "./RangePicker";
+import type { Range } from "@/lib/range";
 
 /**
  * Async server shell wrapping every authenticated admin screen — logo header,
@@ -26,6 +28,21 @@ type ShellProps = {
   /** Sub-page back link target (omitted on the top-level pages). */
   backHref?: string;
   userLabel?: string;
+  /**
+   * THE PERIOD SITS BESIDE THE ENVIRONMENT, BECAUSE IT IS THE SAME KIND OF
+   * CONTROL (user directive 2026-08-15). It used to be a pill beside the
+   * activity section's heading, which said it belonged to that section — and
+   * it now bounds every figure on the admin home, so it belongs where the
+   * other whole-screen selector already is. Two questions asked once at the
+   * top: which product am I looking at, and over what period.
+   *
+   * Passed by the screens the period MEANS something on — the dashboard and
+   * the drill-downs it opens — and absent everywhere else, because a control
+   * that changes nothing is worse than no control: the users list and the
+   * moderation queue carry filters of their own and a period standing over
+   * them would read as one of those.
+   */
+  range?: Range;
 };
 
 export async function AdminShell({
@@ -34,6 +51,7 @@ export async function AdminShell({
   children,
   backHref,
   userLabel,
+  range,
 }: ShellProps) {
   // Resolve viewer scope so the nav can hide tabs a manager can't reach AND
   // scope the badge counts. Admins see every tab; managers see only users +
@@ -130,6 +148,16 @@ export async function AdminShell({
             </span>
           </Link>
           <EnvSwitch env={env} labels={dict.env} />
+          {/* The environment first, then the period: which product, then over
+              what. Both `shrink-0` — the wordmark is what yields when a phone
+              runs out of width, and now that there are two selectors up here
+              it yields sooner. */}
+          {range ? (
+            <RangePicker
+              range={range}
+              labels={dict.dashboard.range.options}
+            />
+          ) : null}
           <AdminNav {...nav} userLabel={userLabel} />
         </div>
       </header>

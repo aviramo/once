@@ -89,7 +89,7 @@
     },
     "dashboard": {
       "title": "Admin overview",
-      "subtitle": "A real-time view of product and business health. Every card is clickable and opens the relevant screen",
+      "subtitle": "Product and business at a glance. Every tile is bounded by the period in the header, and opens the rows behind it",
       "navTitle": "Quick navigation",
       "updated": "Updated {time}",
       "nav": {
@@ -152,10 +152,10 @@
           "all": "All"
         },
         "hint": {
-          "1d": "Totals for the last 24 hours",
-          "7d": "Totals for the last 7 days",
-          "30d": "Totals for the last 30 days",
-          "all": "Totals since the beginning · invitations and chats are counted from the log, which is pruned, so anything older than its retention is missing"
+          "1d": "Every tile counts what came into being in the last 24 hours",
+          "7d": "Every tile counts what came into being in the last 7 days",
+          "30d": "Every tile counts what came into being in the last 30 days",
+          "all": "Every tile counts the whole history, which is the state of the world today. Profiles and sign-outs are counted from the log, which is pruned, so anything older than it kept is missing"
         }
       }
     },
@@ -631,6 +631,61 @@
       "chat": "Messaged them",
       "find": "Started watching them",
       "ignore": "Stopped watching them"
+    },
+    "insight": {
+      "none": "Nothing in the selected period",
+      "capped": "Showing the latest {n} rows only",
+      "unknownUser": "No name",
+      "goneUser": "Deleted account",
+      "archiveNote": "The profile is kept in the archive until the final purge",
+      "purgedNote": "The archive was purged, only the record is left",
+      "goneNote": "Deleted before the archive existed, only the name is left",
+      "photos": "{n} photos in the archive",
+      "messages": "{n} messages",
+      "credits": "{n} credits",
+      "hits": "{n} visits",
+      "air": "stood {t}",
+      "span": "ran {t}",
+      "joinedAt": "joined {t}",
+      "shapes": {
+        "person": "One account per row",
+        "pair": "Two parties per row, and what passed between them",
+        "device": "Anonymous devices with no account, so the environment switch does not bound them"
+      },
+      "tags": {
+        "declined": "Declined",
+        "cancelled": "Cancelled",
+        "expired": "Expired",
+        "accepted": "Accepted",
+        "pending": "Still in the air",
+        "ended": "Ended",
+        "messages": "Conversation",
+        "block": "Block",
+        "report": "Report",
+        "profile": "Profile content",
+        "chat": "Chat content",
+        "inappropriate": "Inappropriate content",
+        "other": "Other",
+        "joined": "Joined",
+        "friend": "Friendship",
+        "code": "By code",
+        "link": "By link",
+        "review": "App Store review",
+        "seed": "Seeded",
+        "test-setup": "Test setup",
+        "credits": "Wallet",
+        "archived": "In the archive",
+        "purged": "Purged",
+        "gone": "No archive",
+        "android": "Android",
+        "ios": "iPhone",
+        "desktop": "Desktop"
+      },
+      "pressed": {
+        "download": "Pressed download",
+        "notify": "Asked to be told",
+        "more": "Opened the site"
+      }
     }
   }
 }

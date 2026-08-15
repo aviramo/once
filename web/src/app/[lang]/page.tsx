@@ -6,18 +6,37 @@ import { hasLocale, defaultLocale, type Locale } from "@/i18n/locales";
 import { AdminShell } from "./_components/AdminShell";
 import { Section, CardGrid, Stat } from "./_components/ui";
 import { RealtimeRefresh } from "./_components/RealtimeRefresh";
-import { RangePicker } from "./_components/RangePicker";
 import { parseRange, rangeSince } from "@/lib/range";
+import { insightHref, insightSpec, type InsightMetric } from "@/lib/insight";
 
 /**
  * The admin home screen: a hub that links to every other admin tab plus a
- * real-time product/business KPI snapshot for managers and the board. Nothing
- * on it is pressable: it is a page you read, and the lists that own each
- * number are one tab away with filters of their own.
+ * real-time product/business KPI snapshot for managers and the board.
  *
- * Two RPCs feed it — `admin_dashboard_metrics` for the snapshot figures and
- * `admin_activity_metrics` for everything the period picker moves — and both
- * are bounded by the environment the header switch is on.
+ * EVERY TILE IS A WINDOW, AND EVERY TILE IS A DOOR (user directive
+ * 2026-08-15).
+ *
+ * The period picker moved out of the activity section's heading and into the
+ * HEADER beside the environment switch, so it is no longer that section's
+ * filter — it bounds every figure on the screen. ONE RULE, and it is what
+ * makes a demographic split and an event count legible under one picker: a
+ * tile counts what CAME INTO BEING inside the window. An account is dated by
+ * when it was opened, a wallet by the account that holds it, a device by the
+ * first time it was seen, an invitation by when it was sent, an ending by when
+ * it ended. "All time" is therefore the state of the world today, which is
+ * what the three snapshot sections used to show unconditionally.
+ *
+ * And every figure now opens the rows it counted (`/insight/<metric>`, one
+ * screen for all of them — see `lib/insight.ts`). That reverses "NO TILE IS A
+ * LINK" of 2026-08-02, and it is safe to reverse because the DESTINATION
+ * changed: a tile used to deep-link into a working list with filters of its
+ * own, which made a screen you read into one you could fall out of by brushing
+ * a number. It now opens exactly what it counted, with one way back.
+ *
+ * Three RPCs feed it — `admin_dashboard_metrics` for the population and its
+ * wallets, `admin_activity_metrics` for what happened, `admin_scan_metrics`
+ * for the visitors — and all three take the same `p_since` and are bounded by
+ * the environment the header switch is on.
  */
 
 type Metrics = {
@@ -28,15 +47,13 @@ type Metrics = {
     os_ios: number;
     os_android: number;
   };
+  /** What is left of the old fixed-recency block. The today / 7d / 30d trios
+   * it used to carry are gone: the period picker asks that question now, and
+   * a tile pinned to a week beside a picker set to a day is a second answer
+   * nobody asked for. */
   users: {
     total: number;
-    new_today: number;
-    new_7d: number;
-    new_30d: number;
     online_5m: number;
-    active_today: number;
-    active_7d: number;
-    active_30d: number;
     with_location: number;
   };
   credits: {
@@ -48,9 +65,10 @@ type Metrics = {
 };
 
 /** Everything that HAPPENED inside the selected window, from
- * `admin_activity_metrics`. Kept separate from {@link Metrics} because these
- * are the only figures the period picker moves — the demographics and the
- * wallet totals are a snapshot of right now, whatever period is chosen. */
+ * `admin_activity_metrics`. Kept separate from {@link Metrics} not because the
+ * window treats the two differently — it bounds both now — but because these
+ * are EVENTS and those are a POPULATION: an ending is dated by its own moment,
+ * an account and the wallet it holds by the day the account was opened. */
 type Activity = {
   active: number;
   accounts: number;
@@ -119,17 +137,7 @@ const EMPTY_ROW: ScanRow = { devices: 0, download: 0, notify: 0, more: 0 };
 
 const EMPTY: Metrics = {
   demographics: { men: 0, women: 0, avg_age: 0, os_ios: 0, os_android: 0 },
-  users: {
-    total: 0,
-    new_today: 0,
-    new_7d: 0,
-    new_30d: 0,
-    online_5m: 0,
-    active_today: 0,
-    active_7d: 0,
-    active_30d: 0,
-    with_location: 0,
-  },
+  users: { total: 0, online_5m: 0, with_location: 0 },
   credits: { balance_total: 0, held_total: 0, extra_total: 0, with_extra: 0 },
 };
 
@@ -152,10 +160,11 @@ function normalize(raw: unknown): Metrics {
   return out as Metrics;
 }
 
-// NO TILE IS A LINK (user, 2026-08-02). Every stat used to deep-link into the
-// filtered list that owned it, which made a screen you READ into a screen you
-// could fall out of by brushing a number. The lists are one tab away and carry
-// their own filters; this page is a snapshot to look at.
+// EVERY TILE IS A LINK AGAIN (user directive 2026-08-15), reversing "no tile
+// is a link" of 2026-08-02 — see the header for why the reversal is safe and
+// `lib/insight.ts` for where each one goes. What the old rule was protecting
+// against still stands and is not to be undone: a tile may not deep-link into
+// a working LIST with filters of its own. It opens the rows it counted.
 
 export default async function AdminDashboard({
   params,
@@ -180,19 +189,24 @@ export default async function AdminDashboard({
   // matching pools never meet, so one number covering both describes nobody.
   const env = await readAdminEnv();
 
+  // ONE WINDOW, HANDED TO ALL THREE. The picker used to move the middle RPC
+  // alone, which is why the demographics and the wallet totals stood on the
+  // same screen describing a different population from the one beside them.
+  const since = rangeSince(range);
   const admin = createSupabaseAdmin();
   const [{ data: metricsData }, { data: activityData }, { data: scanData }, meRes] =
     await Promise.all([
       admin.rpc("admin_dashboard_metrics", {
         p_user_ids: scopedUserIds,
         p_is_test: envIsTest(env),
+        p_since: since,
       }),
       admin.rpc("admin_activity_metrics", {
-        p_since: rangeSince(range),
+        p_since: since,
         p_is_test: envIsTest(env),
         p_user_ids: scopedUserIds,
       }),
-      admin.rpc("admin_scan_metrics"),
+      admin.rpc("admin_scan_metrics", { p_since: since }),
       admin.from("users").select("name").eq("user_id", user.id).maybeSingle(),
     ]);
   const m = normalize(metricsData);
@@ -240,6 +254,24 @@ export default async function AdminDashboard({
     m.users.total > 0
       ? Math.round((m.credits.with_extra / m.users.total) * 100)
       : 0;
+
+  /**
+   * ONE TILE, STATED ONCE. Everything that is the same for all of them lives
+   * here — the label is the dictionary entry under the metric's own key, the
+   * accent and the destination come out of the registry — so a tile is a
+   * metric key and a number, and no call site can give a figure a colour its
+   * drill-down does not share or a door that goes somewhere else.
+   */
+  const tile = (metric: InsightMetric, value: string, hint?: string) => (
+    <Stat
+      key={metric}
+      label={t.metrics[metric]}
+      value={value}
+      hint={hint}
+      href={insightHref(metric, range)}
+      accent={insightSpec(metric).tone}
+    />
+  );
   const updatedTime = new Intl.DateTimeFormat(locale, {
     day: "2-digit",
     month: "2-digit",
@@ -252,7 +284,7 @@ export default async function AdminDashboard({
   const userLabel = `${d.loggedInAs}: ${meName ?? user.email ?? ""}`;
 
   return (
-    <AdminShell dict={d} active="dashboard" userLabel={userLabel}>
+    <AdminShell dict={d} active="dashboard" userLabel={userLabel} range={range}>
       <RealtimeRefresh
         tables="users,groups,user_groups"
         channel="admin-dashboard"
@@ -260,6 +292,14 @@ export default async function AdminDashboard({
       <div>
         <h1 className="text-xl font-bold tracking-tight">{t.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{t.subtitle}</p>
+        {/* THE WINDOW IS STATED ONCE, HERE, and no section repeats it. It used
+            to be the activity section's own hint, which is where it belonged
+            while it was that section's filter; it governs the whole screen
+            now, so it stands under the screen's title, next to the picker that
+            sets it. */}
+        <p className="mt-1 text-xs font-medium text-foreground/70">
+          {t.range.hint[range]}
+        </p>
         <p className="mt-1 text-xs text-muted-foreground">
           {t.updated.replace("{time}", updatedTime)}
         </p>
@@ -288,55 +328,44 @@ export default async function AdminDashboard({
       {scope.kind === "admin" && !envIsTest(env) ? (
         <Section title={t.sections.site} hint={t.hints.site}>
           <CardGrid min="8.5rem">
-            <Stat
-              label={t.metrics.siteTotal}
-              value={fmt(siteTotal.devices)}
-              hint={splitHint(t.hints.siteTotal, (row) => row.devices)}
-            />
-            <Stat
-              label={t.metrics.siteDownload}
-              value={fmt(siteTotal.download)}
-              hint={splitHint(t.hints.siteDownload, (row) => row.download)}
-            />
+            {tile(
+              "siteTotal",
+              fmt(siteTotal.devices),
+              splitHint(t.hints.siteTotal, (row) => row.devices),
+            )}
+            {tile(
+              "siteDownload",
+              fmt(siteTotal.download),
+              splitHint(t.hints.siteDownload, (row) => row.download),
+            )}
             {/* Only an iPhone is ever offered this, so it needs no split — what
                 it needs is the denominator it is a share of. */}
-            <Stat
-              label={t.metrics.siteNotify}
-              value={fmt(siteTotal.notify)}
-              hint={t.hints.siteNotify.replace("{ios}", fmt(scan.site.ios.devices))}
-            />
+            {tile(
+              "siteNotify",
+              fmt(siteTotal.notify),
+              t.hints.siteNotify.replace("{ios}", fmt(scan.site.ios.devices)),
+            )}
           </CardGrid>
         </Section>
       ) : null}
 
+      {/* WHO IS HERE — and under a window, who ARRIVED. Every tile is a fact
+          about the accounts opened inside the period, so the section is the
+          same split it always was, asked of a smaller set of people. At "all
+          time" it is the population itself, which is what this block used to
+          be unconditionally. */}
       <Section title={t.sections.demographics}>
         <CardGrid min="8.5rem">
           {/* The whole first, then how it splits — every tile beside it is a
               share of this one, so it leads. */}
-          <Stat
-            label={t.metrics.total}
-            value={fmt(m.users.total)}
-          />
-          <Stat
-            label={t.metrics.men}
-            value={fmt(m.demographics.men)}
-          />
-          <Stat
-            label={t.metrics.women}
-            value={fmt(m.demographics.women)}
-          />
-          <Stat
-            label={t.metrics.avgAge}
-            value={fmt(m.demographics.avg_age)}
-          />
-          <Stat
-            label={t.metrics.osIos}
-            value={fmt(m.demographics.os_ios)}
-          />
-          <Stat
-            label={t.metrics.osAndroid}
-            value={fmt(m.demographics.os_android)}
-          />
+          {tile("total", fmt(m.users.total))}
+          {tile("men", fmt(m.demographics.men))}
+          {tile("women", fmt(m.demographics.women))}
+          {/* An average has rows behind it too: the door opens the people it
+              was averaged over, each with their own age on the row. */}
+          {tile("avgAge", fmt(m.demographics.avg_age))}
+          {tile("osIos", fmt(m.demographics.os_ios))}
+          {tile("osAndroid", fmt(m.demographics.os_android))}
         </CardGrid>
       </Section>
 
@@ -348,87 +377,38 @@ export default async function AdminDashboard({
           were merged into this: the live counts (in a chat / waiting /
           watching right now) are the users list's own `?state=` filter, which
           is where you go to act on them, not a number to stare at. */}
-      <Section
-        title={t.sections.activity}
-        hint={t.range.hint[range]}
-        action={<RangePicker range={range} labels={t.range.options} />}
-      >
+      <Section title={t.sections.activity}>
         <CardGrid min="8.5rem">
           {/* Who showed up at all. Every tile beside it is something a subset
               of these people did, so it leads. */}
-          <Stat
-            label={t.metrics.aActive}
-            value={fmt(a.active)}
-            accent="ok"
-          />
-          <Stat
-            label={t.metrics.aAccounts}
-            value={fmt(a.accounts)}
-            accent="ok"
-          />
-          <Stat label={t.metrics.aProfiles} value={fmt(a.profiles)} accent="ok" />
+          {tile("aActive", fmt(a.active))}
+          {tile("aAccounts", fmt(a.accounts))}
+          {tile("aProfiles", fmt(a.profiles))}
           {/* The social graph, before the game: `friend_links` is already one
               row per pair, so a friendship counts once by construction. A
               circle join counts per person, which is the question being asked
               — how many joinings happened, not how many circles grew. */}
-          <Stat
-            label={t.metrics.aFriendships}
-            value={fmt(a.friendships)}
-            accent="ok"
-          />
-          <Stat
-            label={t.metrics.aMemberships}
-            value={fmt(a.memberships)}
-            accent="ok"
-          />
-          <Stat
-            label={t.metrics.aInvites}
-            value={fmt(a.invites_sent)}
-          />
-          <Stat
-            label={t.metrics.aDeclined}
-            value={fmt(a.invites_declined)}
-            accent="ended"
-          />
-          <Stat
-            label={t.metrics.aCancelled}
-            value={fmt(a.invites_cancelled)}
-            accent="ended"
-          />
-          <Stat
-            label={t.metrics.aExpired}
-            value={fmt(a.invites_expired)}
-            accent="ended"
-          />
-          <Stat
-            label={t.metrics.aChats}
-            value={fmt(a.chats)}
-            accent="chat"
-          />
-          <Stat
-            label={t.metrics.aAvgMessages}
-            value={nf.format(a.avg_messages)}
-            accent="chat"
-          />
-          <Stat label={t.metrics.aBlocks} value={fmt(a.blocks)} accent="ended" />
-          <Stat
-            label={t.metrics.aReports}
-            value={fmt(a.reports)}
-            accent="ended"
-          />
+          {tile("aFriendships", fmt(a.friendships))}
+          {tile("aMemberships", fmt(a.memberships))}
+          {/* THE FOUR INVITATION TILES OPEN ONE LIST under four filters, which
+              is what makes the drill-down worth having here more than
+              anywhere: a count cannot say who invited whom, and it certainly
+              cannot say how long the thing stood before it was answered. */}
+          {tile("aInvites", fmt(a.invites_sent))}
+          {tile("aDeclined", fmt(a.invites_declined))}
+          {tile("aCancelled", fmt(a.invites_cancelled))}
+          {tile("aExpired", fmt(a.invites_expired))}
+          {tile("aChats", fmt(a.chats))}
+          {tile("aAvgMessages", nf.format(a.avg_messages))}
+          {tile("aBlocks", fmt(a.blocks))}
+          {tile("aReports", fmt(a.reports))}
           {/* The tail of the section is what went wrong or who left, and it
               reads as one block: blocks, reports, sign-outs and deletions all
-              carry the same accent. */}
-          <Stat
-            label={t.metrics.aLogouts}
-            value={fmt(a.logouts)}
-            accent="ended"
-          />
-          <Stat
-            label={t.metrics.aDeletes}
-            value={fmt(a.deletes)}
-            accent="ended"
-          />
+              carry the same accent. The last of them opens the ARCHIVE — the
+              profile that stood behind each deleted account, for as long as
+              the archive still holds it. */}
+          {tile("aLogouts", fmt(a.logouts))}
+          {tile("aDeletes", fmt(a.deletes))}
         </CardGrid>
       </Section>
 
@@ -453,27 +433,20 @@ export default async function AdminDashboard({
           nav tab's own chip, which is one glance away from every screen — a
           dashboard section for a single number was the weakest tile here. */}
 
+      {/* THE WALLETS OF THOSE SAME ACCOUNTS. A wallet has no birthday of its
+          own — it is the account's — which is what lets one window rule cover
+          both this section and the split above it. Each tile opens the people
+          holding that money, with the amount on the row. */}
       <Section title={t.sections.credits}>
         <CardGrid min="8.5rem">
-          <Stat
-            label={t.metrics.balanceTotal}
-            value={fmt(m.credits.balance_total)}
-          />
-          <Stat
-            label={t.metrics.heldTotal}
-            value={fmt(m.credits.held_total)}
-            accent="busy"
-          />
-          <Stat
-            label={t.metrics.extraTotal}
-            value={fmt(m.credits.extra_total)}
-            accent="ok"
-          />
-          <Stat
-            label={t.metrics.withExtra}
-            value={fmt(m.credits.with_extra)}
-            hint={t.hints.extraShare.replace("{pct}", String(extraShare))}
-          />
+          {tile("balanceTotal", fmt(m.credits.balance_total))}
+          {tile("heldTotal", fmt(m.credits.held_total))}
+          {tile("extraTotal", fmt(m.credits.extra_total))}
+          {tile(
+            "withExtra",
+            fmt(m.credits.with_extra),
+            t.hints.extraShare.replace("{pct}", String(extraShare)),
+          )}
         </CardGrid>
       </Section>
     </AdminShell>
