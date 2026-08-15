@@ -10,7 +10,7 @@ import { HOME_ART } from '../tokens'
 //
 // The Play store feature graphic's drawing (authored in
 // `mobile/scripts/build-feature-graphic.mjs`, written to
-// `store/play-feature-graphic.svg`): the brand "1", three hearts drifting
+// `marketing/store/play-feature-graphic.svg`): the brand "1", three hearts drifting
 // toward the one profile card, a few quiet sparks for air. Redrawn here as
 // react-native-svg rather than shipped as a PNG so it stays crisp at any size
 // and takes its colours from `colors.ts` — no component may carry a hex of its

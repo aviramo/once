@@ -25,7 +25,7 @@ const root = path.resolve(
   path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
   '..',
 )
-const out = path.join(root, 'store')
+const out = path.join(root, '..', 'marketing', 'store')
 const web = path.join(root, '..', 'web', 'public')
 
 // ── Palette: the app's own tokens, never re-typed ────────────────────────────

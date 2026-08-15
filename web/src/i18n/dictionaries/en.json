@@ -101,10 +101,10 @@
         "mapDesc": "Active users on the map, in real time"
       },
       "sections": {
-        "scan": "Business-card scans",
         "demographics": "Demographics",
         "credits": "Credits economy",
-        "activity": "Activity"
+        "activity": "Activity",
+        "site": "Home page visits"
       },
       "metrics": {
         "total": "Total users",
@@ -113,8 +113,6 @@
         "avgAge": "Average age",
         "osIos": "iPhone",
         "osAndroid": "Android",
-        "scanAndroid": "Scans, Android",
-        "scanIos": "Scans, iPhone",
         "balanceTotal": "Total credit balance",
         "heldTotal": "Held credits",
         "extraTotal": "Total purchased credits",
@@ -133,13 +131,17 @@
         "aBlocks": "Blocks",
         "aReports": "Reports",
         "aLogouts": "Sign-outs",
-        "aDeletes": "Accounts deleted"
+        "aDeletes": "Accounts deleted",
+        "siteTotal": "Unique devices",
+        "siteDownload": "Pressed download",
+        "siteNotify": "Asked about iPhone"
       },
       "hints": {
-        "scan": "Unique devices that opened the scan page, not the number of visits. Under each number, how many of those devices pressed",
-        "scanAndroid": "{download} pressed download · {more} opened the site",
-        "scanIos": "{notify} asked for an iPhone update · {more} opened the site",
-        "extraShare": "{pct}% of users hold purchased credits"
+        "extraShare": "{pct}% of users hold purchased credits",
+        "site": "Unique devices that opened the home page, not the number of visits",
+        "siteTotal": "{android} Android · {ios} iPhone · {desktop} desktop",
+        "siteDownload": "{android} Android · {ios} iPhone · {desktop} desktop",
+        "siteNotify": "out of {ios} iPhones"
       },
       "viewAll": "All users →",
       "range": {

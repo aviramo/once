@@ -1,7 +1,6 @@
 # ── Secrets / env ──────────────────────────────────────────────────────────
 .env
 .env.*
-!.env.example
 *.env
 *.pem
 *.p8
@@ -42,10 +41,10 @@ supabase/test/
 *.ipa
 *.log
 
-# ── Store pack ─────────────────────────────────────────────────────────────
+# ── Marketing ──────────────────────────────────────────────────────────────
 # App Review captures are real screens of the owner's live account, family
 # photos included. They stay on disk for filming, out of the repo.
-mobile/store/apple-review/
+marketing/store/apple-review/
 
 # ── Editor / OS ────────────────────────────────────────────────────────────
 .DS_Store
@@ -61,4 +60,3 @@ Thumbs.db
 skills-lock.json
 
 .vercel
-.env*

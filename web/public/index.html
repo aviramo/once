@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#F1EEF8" />
-  <title>Once | אפליקציית היכרויות שלא מתנהגת כמו אפליקציית היכרויות</title>
+  <title>Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות</title>
   <meta name="description" content="בלי פיד, בלי אינסוף החלקות ובלי עשרים שיחות פתוחות. Once מציגה אדם אחד בכל פעם, עם 10 דקות להשיב להזמנה" />
   <link rel="canonical" href="https://once-lake.vercel.app/" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=12" />
   <link rel="icon" type="image/png" href="favicon.png?v=12" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Once" />
-  <meta property="og:title" content="Once | אפליקציית היכרויות שלא מתנהגת כמו אפליקציית היכרויות" />
+  <meta property="og:title" content="Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות" />
   <meta property="og:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
   <meta property="og:image" content="https://once-lake.vercel.app/og-image.png?v=2" />
   <meta property="og:image:width" content="1024" />
@@ -21,7 +21,7 @@
   <meta property="og:locale" content="he_IL" />
   <meta property="og:locale:alternate" content="en_US" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Once | אפליקציית היכרויות שלא מתנהגת כמו אפליקציית היכרויות" />
+  <meta name="twitter:title" content="Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות" />
   <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png?v=2" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -154,6 +154,10 @@
       </button>
       <div class="dl-title" id="dl-title">להורדת האפליקציה</div>
       <p class="dl-note" id="dl-note"></p>
+      <!-- iPhone only. There is nothing to install today, so the one thing that
+           still works is offered instead: be told when there is. Wired below. -->
+      <a class="btn btn-primary dl-cta" id="dl-ios" hidden
+         href="mailto:once.app.support@gmail.com?subject=%D7%A2%D7%93%D7%9B%D7%A0%D7%95%20%D7%90%D7%95%D7%AA%D7%99%20%D7%9B%D7%A9%D7%99%D7%A9%20%D7%90%D7%99%D7%99%D7%A4%D7%95%D7%9F"></a>
       <div class="dl-qr" id="dl-qr"></div>
     </div>
   </div>
@@ -165,6 +169,60 @@
     'use strict';
 
     var DOWNLOAD_URL = 'download.html';
+
+    /* ---------- The counter ----------
+       The printed cards are handed out by hand and the site is passed around by
+       link, so the only way to know whether either works is for this page to say
+       what happened on it: a DEVICE opened it, and then that device pressed
+       something. A device is what is counted, not a visit — the same person
+       coming back is the same person — and the id below is kept so the second
+       visit finds the first. The rows land under `source = 'site'`, apart from
+       the card's own.
+       Everything is wrapped: a counter may never be what breaks the page. */
+    var VISIT_KEY = 'once.visit.device';
+    var visitDevice = null;
+    try {
+      visitDevice = localStorage.getItem(VISIT_KEY);
+      if (!visitDevice) {
+        /* A device with no crypto.randomUUID is old enough that time plus a
+           random tail is unique enough for a marketing counter. */
+        visitDevice = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem(VISIT_KEY, visitDevice);
+      }
+    } catch (e) {
+      /* Storage blocked (private mode, a locked-down browser): send nothing and
+         let the route identify the visitor its own way. */
+      visitDevice = null;
+    }
+
+    function reportVisit(action) {
+      try {
+        var s = window.OnceStore;
+        var payload = JSON.stringify({
+          device: visitDevice,
+          platform: s.isIOS ? 'ios' : (s.isAndroid ? 'android' : 'desktop'),
+          action: action
+        });
+        /* sendBeacon is the whole reason a press can be counted at all: it
+           survives the page being left for the store or the mail app. fetch with
+           keepalive is the same promise where it is missing. Neither is waited
+           on — a press must never be delayed by a counter. */
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/visit', new Blob([payload], { type: 'application/json' }));
+        } else {
+          fetch('/api/visit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true
+          });
+        }
+      } catch (e) {}
+    }
+    reportVisit('open');
+
     /* Illustrations live in art.js (window.ART), keyed per section. A media slot
        whose builder passes a key renders the artwork; one without stays the
        labelled placeholder. */
@@ -197,15 +255,15 @@
     var STRINGS = {
       he: {
         dir: 'rtl',
-        title: 'Once | אפליקציית היכרויות שלא מתנהגת כמו אפליקציית היכרויות',
+        title: 'Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות',
         metaDescription: 'בלי פיד, בלי אינסוף החלקות ובלי עשרים שיחות פתוחות. Once מציגה אדם אחד בכל פעם, עם 10 דקות להשיב להזמנה',
         ogDescription: 'בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה',
-        ui: { tag: 'בהרצה', preview: 'תצוגה מקדימה', noteIOS: 'Once אינה זמינה לאייפון', noteDesktop: 'פתחו את הדף מהטלפון, או סרקו את הקוד:', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
+        ui: { tag: 'בהרצה', preview: 'תצוגה מקדימה', noteIOS: 'Once עדיין לא באייפון. היא בתהליך אישור בחנות של אפל, ותהיה כאן ברגע שנקבל אישור', iosNotify: 'עדכנו אותי כשיש אייפון', noteDesktop: 'פתחו את הדף מהטלפון, או סרקו את הקוד:', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
         /* One label per pillar, in pillar order. */
         nav: { links: ['אדם אחד', 'זמן אמת', 'מעגלים', 'הורים'], login: 'התחברות' },
         hero: {
           eyebrow: 'רק אחד. עכשיו',
-          title: { lines: ['אפליקציית היכרויות', 'שלא מתנהגת כמו', 'אפליקציית היכרויות'], accent: true },
+          title: { lines: ['אפליקציית היכרויות', 'שמסרבת להתנהג כמו עוד', 'אפליקציית היכרויות'], accent: true },
           sub: 'כי הגיע הזמן לשבור את כל ההרגלים הישנים. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס',
           pills: ['אדם אחד בכל פעם', 'זמן אמת', 'מעגלים משותפים', 'לוז של הורים'],
         },
@@ -288,7 +346,7 @@
         title: 'Once | A dating app that refuses to behave like a dating app',
         metaDescription: 'No feed, no endless swiping, no twenty open chats. Once shows you one person at a time, with 10 minutes to answer an invitation',
         ogDescription: 'No feed and no endless swiping. One person at a time, 10 minutes to answer an invitation',
-        ui: { tag: 'Beta', preview: 'Preview', noteIOS: 'Once is not available on iPhone', noteDesktop: 'Open this page on your phone, or scan the code:', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
+        ui: { tag: 'Beta', preview: 'Preview', noteIOS: 'Once is not on iPhone yet. It is in review at the App Store and will be here the moment it is approved', iosNotify: 'Tell me when iPhone is ready', noteDesktop: 'Open this page on your phone, or scan the code:', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
         nav: { links: ['One at a time', 'Real time', 'Circles', 'Parents'], login: 'Login' },
         hero: {
           eyebrow: 'Just one. Right now',
@@ -682,6 +740,17 @@
     function closeDl() { dl.setAttribute('hidden', ''); document.body.style.overflow = ''; }
     function openDl() {
       dlNote.textContent = window.OnceStore.isIOS ? T.ui.noteIOS : T.ui.noteDesktop;
+      /* The iPhone state is the one this dialog is opened in most: the printed
+         card sends everybody to `/`, and most phones that scanned it were
+         iPhones. It may not be a dead end, so it carries the one action there
+         is. */
+      var dlIos = document.getElementById('dl-ios');
+      dlIos.textContent = T.ui.iosNotify;
+      dlIos.hidden = !window.OnceStore.isIOS;
+      if (!dlIos.dataset.wired) {
+        dlIos.dataset.wired = '1';
+        dlIos.addEventListener('click', function () { reportVisit('notify'); });
+      }
       dl.removeAttribute('hidden');
       document.body.style.overflow = 'hidden';
       if (window.OnceStore.isIOS || qrDrawn) return;
@@ -699,9 +768,13 @@
 
     function wireDownloadButtons() {
       Array.prototype.forEach.call(document.querySelectorAll('a[href="' + DOWNLOAD_URL + '"]'), function (a) {
-        if (window.OnceStore.isAndroid) { a.href = window.OnceStore.url(); return; }
         if (a.dataset.dlWired) return;
         a.dataset.dlWired = '1';
+        /* Counted on every route out of here, Android included — that one goes
+           straight to the store and never opens the dialog, so without this the
+           funnel would be missing exactly the visitors who converted. */
+        a.addEventListener('click', function () { reportVisit('download'); });
+        if (window.OnceStore.isAndroid) { a.href = window.OnceStore.url(); return; }
         a.addEventListener('click', function (e) {
           e.preventDefault();
           closeMenu();

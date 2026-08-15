@@ -96,11 +96,12 @@ Thumbs.db
 .vscode/
 .idea/
 
-# ── Store pack ─────────────────────────────────────────────────────────────
-# Listing artwork and screenshot sources: tracked in git (real work), but no
-# build reads them. apple-review/ is not in git at all — real screens of a live
+# ── Marketing ──────────────────────────────────────────────────────────────
+# Everything made AROUND the app rather than in it: the store listing pack, the
+# printed card, the portfolio page. Tracked in git (real work), but no build
+# reads any of it. apple-review/ is not in git at all — real screens of a live
 # account, family photos included.
-mobile/store/
+marketing/
 
 # ── Project prose ──────────────────────────────────────────────────────────
 *.md

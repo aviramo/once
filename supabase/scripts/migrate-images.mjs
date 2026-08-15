@@ -6,19 +6,21 @@
  * 3. Deletes all storage objects that are not a valid normal image
  *
  * Run from the supabase/ directory:
- *   SUPABASE_SERVICE_ROLE_KEY=<key> node scripts/migrate-images.mjs
+ *   node scripts/migrate-images.mjs
  */
 
 import { createRequire } from 'module'
 import sharp from 'sharp'
+import { loadRootEnv } from '../../scripts/env.mjs'
 
 const require = createRequire(import.meta.url)
 const { encode: encodeBlurhash } = require('../../mobile/node_modules/blurhash')
 const { createClient } = require('../../mobile/node_modules/@supabase/supabase-js')
 
-const SUPABASE_URL = 'https://sjsblyumdlwckrshwxei.supabase.co'
+loadRootEnv()
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://sjsblyumdlwckrshwxei.supabase.co'
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
-if (!SERVICE_KEY) { console.error('Set SUPABASE_SERVICE_ROLE_KEY env var'); process.exit(1) }
+if (!SERVICE_KEY) { console.error('SUPABASE_SERVICE_ROLE_KEY is missing from the root .env'); process.exit(1) }
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY, {
   auth: { persistSession: false },

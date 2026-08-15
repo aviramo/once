@@ -7,6 +7,18 @@ This file is the **operational contract** for the project: how to act, publish, 
 Aids for humans, never a source of truth — the code and migrations are. Rewrite them from the code when asked; never let one of them drive a code decision.
 - **`docs/תיעוד המערכת.md`** — the app's explanation document (Hebrew; was `APP_OVERVIEW.md` until 2026-08-05). **FUNCTIONAL, NOT TECHNICAL** (user directive 2026-08-05): what the app DOES, what the user sees, which rules decide what — **no code, no file names, no schema, no SQL, no RPC names**. A reader must be able to understand the whole product without opening a single source file. Written for someone with no code access (a new person, a partner, or an external assistant like ChatGPT). Its spine is the four central features, in this order: **זמן אמת · רק אחד · לו״ז הורים · מעגלים** (user directive 2026-08-05) — the same four the landing page is built on. The user asks for it to be refreshed periodically — on such a request, re-derive it from `HEAD` **plus the working tree** and the live DB, keep its section structure, and update the "what changed" section + the version line in the header. Numbers and rules stated in product terms (10 minutes, one credit a day, two photos) are welcome; mechanism is not.
 
+## Marketing (`marketing/`) — everything made AROUND the product
+
+Not the app and not the site: the store listing pack (`marketing/store/`, moved out of `mobile/store/` on 2026-08-15), the printed card (`marketing/postcard/`) and the portfolio page (`marketing/portfolio/`). No build reads any of it — `.easignore` and `.vercelignore` keep the whole folder out of the EAS upload and the deployment — and `marketing/store/apple-review/` is deliberately not in git (real captures of the owner's live account, family photos included). The generators that draw the store art still live in `mobile/scripts/` because they read the app's own `src/colors.ts`; they write across into `marketing/store/`.
+
+**THE PRINTED CARD IS THE PDF, NOT THE HTML — SO EVERY CHANGE ENDS WITH A NEW PDF** (user directive 2026-08-15). `postcard.html` is the source, but the deliverable is `marketing/postcard/once-postcard-a6-bleed.pdf`, and an edit to the card that does not regenerate it leaves the two disagreeing, with the STALE one being the file anybody would actually send to a press. So a copy fix, a colour, a nudge of spacing — anything at all in that file — is followed in the same change by:
+
+```
+node marketing/postcard/make-pdf.mjs
+```
+
+Never hand the user an edited card without it, and never describe the change as done until the PDF is rebuilt. What that script guarantees, and why each part is load-bearing (the paper stated in inches rather than left to `@page`, the app's static TTFs replacing the webfont so the text is not re-drawn as Type 3, `printBackground` over the DevTools protocol because the whole front face is a background) is documented in its own header comments and in [marketing/README.md](marketing/README.md) — read those before changing how it renders.
+
 ## Operational autonomy
 
 Claude has blanket upfront permission for every action it can perform locally or via available tooling. **Anything Claude can do alone, Claude does alone** — edit any file (incl. `app.json`/`eas.json`/`package.json`/`CLAUDE.md`), run `npm`/`eas`/git, apply Supabase migrations, deploy edge functions, hit any API with credentials it already has. Don't narrate intent or ask "should I run X?" — run it and report. Long-running commands (EAS builds, deploys) → run in background and keep working.
@@ -42,7 +54,19 @@ On "פרסם" / "תפרסם" / "release" / "publish" / "upload" / "ship it" (wit
 - Submit targets: TestFlight (iOS), Play **`production`** track (Android, public).
 - After kicking off, report the build + submission URLs and stop — do not poll or wait.
 
-**EAS env vars** are read from the EAS `production`/`preview`/`development` environments, not `mobile/.env` (local-only). Push local → EAS: `cd mobile && cp .env .env.local && eas env:push production && rm .env.local`. Missing `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY` crashes the production build on launch (`supabaseUrl is required`).
+**EAS env vars** are read from the EAS `production`/`preview`/`development` environments, not from the local `.env`. Push local → EAS: `node scripts/eas-env-push.mjs production` (writes the `EXPO_PUBLIC_*` lines to a throwaway `mobile/.env.local`, runs `eas env:push`, removes it). Missing `EXPO_PUBLIC_SUPABASE_URL`/`EXPO_PUBLIC_SUPABASE_ANON_KEY` crashes the production build on launch (`supabaseUrl is required`).
+
+## ONE env file: `.env` at the repo root
+
+**There is exactly one env file in the project and it is `/.env`** (user directive 2026-08-15). No `mobile/.env`, no `web/.env.local`, **no `.env.example`** — a value is written down once and every consumer reads that file. What it holds, so a fresh clone knows what to recreate: `SUPABASE_URL` + its `EXPO_PUBLIC_` / `NEXT_PUBLIC_` twins, `EXPO_PUBLIC_SUPABASE_ANON_KEY` + `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `EXPO_PUBLIC_GOOGLE_PLACES_KEY` + `GOOGLE_PLACES_KEY` (same key, the second used server-side by the admin site's `/api/places`), and `FAL_KEY` (portraits for the seeded test accounts). This line is the list; a template file beside the real one would be a second place to update.
+
+It is **local development only**. The published values live in the EAS environments (mobile) and in the Vercel project (web), and the loader is `process.loadEnvFile` — Node's own, which **leaves a variable that is already in the environment alone** — so the file is a fallback that can never override a deployed value, and a build machine that has no `.env` checked out is unaffected.
+
+- **`scripts/env.mjs`** is the one loader (`loadRootEnv()`); every node script imports it (`scripts/appstore-seed/*`, `mobile/scripts/seed-*`, `supabase/scripts/migrate-images`) instead of hand-parsing a file or expecting a key on the command line.
+- **`scripts/with-env.mjs`** puts it into the environment of a spawned command — `node ../scripts/with-env.mjs expo start`, which is what every env-needing `mobile` npm script now runs. Expo's own loader (`@expo/env`) only looks inside the app folder and never overwrites what is already set, and `babel-preset-expo` inlines `EXPO_PUBLIC_*` straight from `process.env`, so pre-loading is all it takes. `aab:local` goes through it and delegates to `aab:local:run` so the whole `&&` chain — gradle's Metro bundle included — inherits the env without the runner having to re-quote it.
+- **`web/next.config.ts`** loads it directly: Next only reads `.env*` files sitting beside itself, and the config is evaluated before anything is compiled.
+- A **prefix is not duplication**: `EXPO_PUBLIC_` / `NEXT_PUBLIC_` is what makes a value visible to a client bundle, so the same Supabase URL appears under both names (plus the bare one the node scripts read) on purpose. Do not "tidy" them into one.
+- `.vercel/` may hold a `.env.production.local` again — that is the Vercel CLI's own cache, regenerated by `vercel build` / `vercel env pull`, not a source. Never edit it and never read from it.
 
 ## Trello — DISABLED
 

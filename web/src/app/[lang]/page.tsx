@@ -105,7 +105,15 @@ type ScanRow = {
   /** Followed the link out to the site. */
   more: number;
 };
-type Scan = { android: ScanRow; ios: ScanRow };
+/** The same three counts for the HOME PAGE, which is where the card's QR sends
+ * people now that /scan is gone. `more` is always 0 here: it counted the link
+ * OUT to the site, and on the site there is nowhere further to go. */
+type SiteScan = { android: ScanRow; ios: ScanRow; desktop: ScanRow };
+/** `admin_scan_metrics` still answers with the card's three platform keys at
+ * the top level, all zero since the merge folded those devices into the site.
+ * They are not read here and are not modelled; the RPC keeps them only so the
+ * panel that is live until the next deploy goes on working. */
+type Scan = { site: SiteScan };
 
 const EMPTY_ROW: ScanRow = { devices: 0, download: 0, notify: 0, more: 0 };
 
@@ -195,14 +203,39 @@ export default async function AdminDashboard({
   // Every platform is read through the same fallback, so a payload from an
   // older RPC (or none at all, before the table exists) draws zeros instead of
   // crashing the whole admin home.
-  const scanRaw = (scanData ?? {}) as Record<string, Partial<ScanRow>>;
-  const scan: Scan = {
-    android: { ...EMPTY_ROW, ...(scanRaw.android ?? {}) },
-    ios: { ...EMPTY_ROW, ...(scanRaw.ios ?? {}) },
+  const scanRaw = (scanData ?? {}) as Record<string, Partial<ScanRow>> & {
+    site?: Record<string, Partial<ScanRow>>;
   };
+  const siteRaw = scanRaw.site ?? {};
+  const scan: Scan = {
+    site: {
+      android: { ...EMPTY_ROW, ...(siteRaw.android ?? {}) },
+      ios: { ...EMPTY_ROW, ...(siteRaw.ios ?? {}) },
+      desktop: { ...EMPTY_ROW, ...(siteRaw.desktop ?? {}) },
+    },
+  };
+  // A device is counted once per platform, so the three add up to the unique
+  // total without any risk of counting a visitor twice.
+  const SITE_PLATFORMS = ["android", "ios", "desktop"] as const;
+  const siteTotal = SITE_PLATFORMS.reduce(
+    (acc, k) => ({
+      devices: acc.devices + scan.site[k].devices,
+      download: acc.download + scan.site[k].download,
+      notify: acc.notify + scan.site[k].notify,
+      more: 0,
+    }),
+    { ...EMPTY_ROW },
+  );
 
   const nf = new Intl.NumberFormat(locale);
   const fmt = (n: number) => nf.format(n ?? 0);
+  /** The per-platform line under a site tile. One template, one accessor, so
+   * the visit split and the download split can never be written differently. */
+  const splitHint = (template: string, pick: (row: ScanRow) => number) =>
+    SITE_PLATFORMS.reduce(
+      (line, k) => line.replace(`{${k}}`, fmt(pick(scan.site[k]))),
+      template,
+    );
   const extraShare =
     m.users.total > 0
       ? Math.round((m.credits.with_extra / m.users.total) * 100)
@@ -232,41 +265,45 @@ export default async function AdminDashboard({
         </p>
       </div>
 
-      {/* The printed card, above everything the app itself reports: this is
-          the step BEFORE an account exists, so it leads. Two numbers and no
-          total — an Android scan can install today and an iPhone scan is shown
-          the "not yet on iPhone" state instead, so summing them would hide the
-          one thing worth knowing. Admins only: it is a business figure about
-          the cards being handed out, not about anybody's circle.
+      {/* The home page, above everything the app itself reports: this is the
+          step BEFORE an account exists, so it leads. It is where the printed
+          card's QR sends people now that /scan is gone, and where every
+          forwarded link lands, so it is the widest mouth the product has — and
+          the devices the cards brought in through /scan were folded into it
+          rather than left as a bucket that can never move again.
+
+          THREE NUMBERS, EACH ITS OWN TILE. What a device DID is the question
+          worth asking, so pressing download is a figure in its own right and
+          not a footnote under the visit count; the platform split moved into
+          the hints, where a breakdown belongs. ("How many opened the site" is
+          gone with /scan — the site cannot ask that about itself.)
 
           PRODUCTION ONLY (user directive 2026-08-13). Every other block on this
           screen is drawn twice, once per world, because the same question has a
-          different answer in each. This one does not: the cards are real cards
-          handed to real people, there is one /scan and it counts whoever opened
-          it, so the same figure standing in the test view would be the real
-          world's number wearing the test world's frame. The switch therefore
-          does not scope this block — it decides whether it is on the screen at
-          all. */}
+          different answer in each. This one does not: these are real visitors
+          to one public page, so the same figure standing in the test view would
+          be the real world's number wearing the test world's frame. The switch
+          therefore does not scope this block — it decides whether it is on the
+          screen at all. */}
       {scope.kind === "admin" && !envIsTest(env) ? (
-        <Section title={t.sections.scan} hint={t.hints.scan}>
+        <Section title={t.sections.site} hint={t.hints.site}>
           <CardGrid min="8.5rem">
-            {/* Under each number, what those same devices went on to press.
-                The pair differs by platform because the PAGE differs: an
-                Android scan is offered the store, an iPhone scan is offered
-                "tell me when" in its place, and both are offered the site. */}
             <Stat
-              label={t.metrics.scanAndroid}
-              value={fmt(scan.android.devices)}
-              hint={t.hints.scanAndroid
-                .replace("{download}", fmt(scan.android.download))
-                .replace("{more}", fmt(scan.android.more))}
+              label={t.metrics.siteTotal}
+              value={fmt(siteTotal.devices)}
+              hint={splitHint(t.hints.siteTotal, (row) => row.devices)}
             />
             <Stat
-              label={t.metrics.scanIos}
-              value={fmt(scan.ios.devices)}
-              hint={t.hints.scanIos
-                .replace("{notify}", fmt(scan.ios.notify))
-                .replace("{more}", fmt(scan.ios.more))}
+              label={t.metrics.siteDownload}
+              value={fmt(siteTotal.download)}
+              hint={splitHint(t.hints.siteDownload, (row) => row.download)}
+            />
+            {/* Only an iPhone is ever offered this, so it needs no split — what
+                it needs is the denominator it is a share of. */}
+            <Stat
+              label={t.metrics.siteNotify}
+              value={fmt(siteTotal.notify)}
+              hint={t.hints.siteNotify.replace("{ios}", fmt(scan.site.ios.devices))}
             />
           </CardGrid>
         </Section>

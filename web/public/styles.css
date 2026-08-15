@@ -668,6 +668,9 @@ strong { color: var(--ink); font-weight: 600; }
 .dl-close { position: absolute; inset-block-start: 8px; inset-inline-end: 8px; }
 .dl-title { font-weight: 800; font-size: 1.2rem; color: var(--ink); }
 .dl-note { margin-top: 10px; color: var(--ink-2); font-weight: 500; line-height: 1.5; }
+/* The iPhone state's one action. Full width of the card, so it reads as the
+   thing to do rather than as a link inside the sentence above it. */
+.dl-cta { margin-top: 18px; width: 100%; }
 .dl-qr:not(:empty) { margin-top: 18px; display: flex; justify-content: center; }
 .dl-qr svg { inline-size: 190px; block-size: 190px; display: block; border-radius: var(--r-xs); }
 

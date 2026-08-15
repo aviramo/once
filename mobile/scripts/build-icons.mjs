@@ -11,7 +11,7 @@ import path from 'node:path'
 //
 // Each output is written where its consumer needs it, and nowhere twice:
 // mobile/assets = what the app binary ships (app.json points at these by
-// relative path), mobile/store = console upload art, web/public = what the site
+// relative path), marketing/store = console upload art, web/public = what the site
 // serves. They are separate renders of one drawing, not copies of each other.
 //
 // Geometry lives in a 1024 viewBox centred on (512,512). The glyph is authored
@@ -33,7 +33,8 @@ const root = path.resolve(
   '..',
 )
 const assets = path.join(root, 'assets')
-const store = path.join(root, 'store')
+// The console art lives with the rest of the marketing collateral, outside the app.
+const store = path.join(root, '..', 'marketing', 'store')
 const web = path.join(root, '..', 'web', 'public')
 const webApp = path.join(root, '..', 'web', 'src', 'app')
 const appJson = path.join(root, 'app.json')

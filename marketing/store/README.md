@@ -14,24 +14,24 @@ Default language: **Hebrew (Israel) — he-IL**. Add English (United States) —
 
 | Field in Play Console | File |
 |---|---|
-| App icon (512×512 PNG) | `mobile/store/once-512.png` |
-| Feature graphic (1024×500 PNG) | `mobile/store/play-feature-graphic.png` |
-| Phone screenshot 1 — one person at a time | `mobile/store/google/he/screenshot-1-one-person.png` |
-| Phone screenshot 2 — sending an invitation | `mobile/store/google/he/screenshot-2-invite.png` |
-| Phone screenshot 3 — ten minutes, the clock running | `mobile/store/google/he/screenshot-3-timer.png` |
-| Phone screenshot 4 — an invitation that arrived | `mobile/store/google/he/screenshot-4-incoming.png` |
-| Phone screenshot 5 — friends and shared circles | `mobile/store/google/he/screenshot-5-circles.png` |
-| Phone screenshot 6 — the conversation it ends in | `mobile/store/google/he/screenshot-6-chat.png` |
+| App icon (512×512 PNG) | `marketing/store/once-512.png` |
+| Feature graphic (1024×500 PNG) | `marketing/store/play-feature-graphic.png` |
+| Phone screenshot 1 — one person at a time | `marketing/store/google/he/screenshot-1-one-person.png` |
+| Phone screenshot 2 — sending an invitation | `marketing/store/google/he/screenshot-2-invite.png` |
+| Phone screenshot 3 — ten minutes, the clock running | `marketing/store/google/he/screenshot-3-timer.png` |
+| Phone screenshot 4 — an invitation that arrived | `marketing/store/google/he/screenshot-4-incoming.png` |
+| Phone screenshot 5 — friends and shared circles | `marketing/store/google/he/screenshot-5-circles.png` |
+| Phone screenshot 6 — the conversation it ends in | `marketing/store/google/he/screenshot-6-chat.png` |
 
 FOUR SETS of those six frames, one per store × language — each **drawn** at that
 store's size, never an upscale of the other:
 
 | Folder | Size | Where it goes |
 |---|---|---|
-| `mobile/store/google/he/` | 1080×1920 | Play Console phone screenshots, Hebrew listing (he-IL, the default) |
-| `mobile/store/google/en/` | 1080×1920 | Play Console phone screenshots, English translation (en-US) |
-| `mobile/store/apple/he/` | 1284×2778 | App Store Connect 6.5"/6.7" portrait, Hebrew |
-| `mobile/store/apple/en/` | 1284×2778 | App Store Connect 6.5"/6.7" portrait, English |
+| `marketing/store/google/he/` | 1080×1920 | Play Console phone screenshots, Hebrew listing (he-IL, the default) |
+| `marketing/store/google/en/` | 1080×1920 | Play Console phone screenshots, English translation (en-US) |
+| `marketing/store/apple/he/` | 1284×2778 | App Store Connect 6.5"/6.7" portrait, Hebrew |
+| `marketing/store/apple/en/` | 1284×2778 | App Store Connect 6.5"/6.7" portrait, English |
 
 Play accepts 320–3840 px per side; App Store Connect accepts 1242×2688, 2688×1242,
 1284×2778 or 2778×1284 for these sizes, and the portrait 1284×2778 set here is the one
@@ -154,8 +154,8 @@ Once is a different way to meet. Worth trying.
 2. Set **Default language** to *Hebrew (Israel) — he-IL*.
 3. Paste the Hebrew **App name**, **Short description**, **Full description** from the section above.
 4. **Graphics:**
-   - App icon → upload `mobile/store/once-512.png`.
-   - Feature graphic → upload `mobile/store/play-feature-graphic.png`.
+   - App icon → upload `marketing/store/once-512.png`.
+   - Feature graphic → upload `marketing/store/play-feature-graphic.png`.
    - Phone screenshots → upload all six `google/he/screenshot-*.png` files in order (1 → 6).
 5. Save → Play Console requires the page to pass validation before you can submit the change for review.
 6. After saving the Hebrew listing, click **Manage translations → Add your own translations**, pick *English (United States)*, paste the English copy, and upload the **`google/en/`** screenshots (the icon and feature graphic are shared).
@@ -166,7 +166,7 @@ Once is a different way to meet. Worth trying.
 
 Both generators are checked in:
 
-- `node mobile/store/make-screenshots.mjs` → produces all 6 `screenshot-*.png` in each
+- `node marketing/store/make-screenshots.mjs` → produces all 6 `screenshot-*.png` in each
   of the four sets — `google/{he,en}` (1080×1920) and `apple/{he,en}` (1284×2778) —
   from the captures in `shots/{he,en}`. `--only <store>:<lang>:<n>` renders a single
   frame, for a look before the whole set is drawn. The frame is authored in a 1080-wide design space: the headline block and

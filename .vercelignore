@@ -2,6 +2,7 @@
 # Exclude the rest of the monorepo from the deployment upload so it stays small.
 /mobile
 /supabase
+/marketing
 /img
 /mask
 /assets

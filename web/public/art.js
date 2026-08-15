@@ -380,7 +380,7 @@
   var ART = {};
 
   /* ---------- Store feature graphic ---------- */
-  /* Redrawn from mobile/store/play-feature-graphic.svg so the site band and the
+  /* Redrawn from marketing/store/play-feature-graphic.svg so the site band and the
      Play listing are the same picture: the ringed "1", the broken dial around it,
      three hearts, one profile card and a scatter of dots. Every element below is
      defined ONCE and only placed differently by the two layouts, so the long

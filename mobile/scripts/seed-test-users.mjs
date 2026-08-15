@@ -2,17 +2,19 @@ import { createClient } from '@supabase/supabase-js'
 import { fal } from '@fal-ai/client'
 import sharp from 'sharp'
 import crypto from 'node:crypto'
+import { loadRootEnv } from '../../scripts/env.mjs'
 
+loadRootEnv()
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://sjsblyumdlwckrshwxei.supabase.co'
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY
 const FAL_KEY = process.env.FAL_KEY
 
 if (!SERVICE_ROLE) {
-  console.error('ERROR: set SUPABASE_SERVICE_ROLE_KEY (Supabase Dashboard → Settings → API → service_role)')
+  console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY is missing from the root .env (Supabase Dashboard → Settings → API → service_role)')
   process.exit(1)
 }
 if (!FAL_KEY) {
-  console.error('ERROR: set FAL_KEY (https://fal.ai/dashboard/keys)')
+  console.error('ERROR: FAL_KEY is missing from the root .env (https://fal.ai/dashboard/keys)')
   process.exit(1)
 }
 

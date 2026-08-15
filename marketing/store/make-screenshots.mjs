@@ -13,13 +13,13 @@
 // FOUR SETS: {google, apple} × {he, en}. The captures themselves are per
 // LANGUAGE (the app was run in each), and the headline copy follows.
 //
-//   node mobile/store/make-screenshots.mjs
+//   node marketing/store/make-screenshots.mjs
 //
-// Output: mobile/store/<google|apple>/<he|en>/screenshot-1..6-*.png
+// Output: marketing/store/<google|apple>/<he|en>/screenshot-1..6-*.png
 //
 // Capturing (what produced the files in shots/<lang>/):
 //   adb -s emulator-5554 shell screencap -p -d <display-id> /sdcard/c.png
-//   adb -s emulator-5554 pull /sdcard/c.png mobile/store/shots/<lang>/<name>.png
+//   adb -s emulator-5554 pull /sdcard/c.png marketing/store/shots/<lang>/<name>.png
 // Take them at the device's OWN density and font scale (`wm density reset`,
 // `settings put system font_scale 1.0`) — the emulator is often left at a large
 // setting for testing, and the store is not the place to show it. The demo state
@@ -37,7 +37,8 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 // Intermediate HTML is a build artefact, not a checked-in asset.
 const BUILD = join(tmpdir(), 'once-store-listing')
 const SHOTS = join(HERE, 'shots')
-const FONTS = join(HERE, '..', 'node_modules', '@expo-google-fonts', 'noto-sans-hebrew')
+// The app's own faces, so Hebrew shapes here exactly as it does on the phone.
+const FONTS = join(HERE, '..', '..', 'mobile', 'node_modules', '@expo-google-fonts', 'noto-sans-hebrew')
 
 const CHROME = [
   'C:/Program Files/Google/Chrome/Application/chrome.exe',

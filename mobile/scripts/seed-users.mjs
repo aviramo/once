@@ -3,13 +3,15 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { loadRootEnv } from '../../scripts/env.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+loadRootEnv()
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://sjsblyumdlwckrshwxei.supabase.co'
 const SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY
 if (!SERVICE_ROLE) {
-  console.error('ERROR: set SUPABASE_SERVICE_ROLE_KEY env var (Supabase Dashboard → Settings → API → service_role)')
+  console.error('ERROR: SUPABASE_SERVICE_ROLE_KEY is missing from the root .env (Supabase Dashboard → Settings → API → service_role)')
   process.exit(1)
 }
 

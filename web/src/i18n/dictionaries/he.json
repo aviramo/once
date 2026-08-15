@@ -101,10 +101,10 @@
         "mapDesc": "משתמשים פעילים על המפה בזמן אמת"
       },
       "sections": {
-        "scan": "סריקות כרטיס ביקור",
         "demographics": "פילוח משתמשים",
         "credits": "כלכלת קרדיטים",
-        "activity": "פעילות"
+        "activity": "פעילות",
+        "site": "כניסות לדף הבית"
       },
       "metrics": {
         "total": "סך משתמשים",
@@ -113,8 +113,6 @@
         "avgAge": "ממוצע גילאים",
         "osIos": "iPhone",
         "osAndroid": "Android",
-        "scanAndroid": "סריקה אנדרואיד",
-        "scanIos": "סריקה אייפון",
         "balanceTotal": "סך יתרת קרדיטים",
         "heldTotal": "קרדיטים בהקפאה",
         "extraTotal": "סך קרדיטים שנקנו",
@@ -133,13 +131,17 @@
         "aBlocks": "חסימות",
         "aReports": "דיווחים",
         "aLogouts": "התנתקויות",
-        "aDeletes": "מחיקות חשבון"
+        "aDeletes": "מחיקות חשבון",
+        "siteTotal": "מכשירים ייחודיים",
+        "siteDownload": "לחצו הורדה",
+        "siteNotify": "ביקשו עדכון לאייפון"
       },
       "hints": {
-        "scan": "מכשירים ייחודיים שפתחו את דף הסריקה, לא מספר הכניסות. מתחת לכל מספר, כמה מאותם מכשירים לחצו",
-        "scanAndroid": "{download} לחצו הורדה · {more} פתחו את האתר",
-        "scanIos": "{notify} ביקשו עדכון לאייפון · {more} פתחו את האתר",
-        "extraShare": "{pct}% מהמשתמשים עם קרדיטים שנקנו"
+        "extraShare": "{pct}% מהמשתמשים עם קרדיטים שנקנו",
+        "site": "מכשירים ייחודיים שפתחו את דף הבית, לא מספר הכניסות",
+        "siteTotal": "{android} אנדרואיד · {ios} אייפון · {desktop} מחשב",
+        "siteDownload": "{android} אנדרואיד · {ios} אייפון · {desktop} מחשב",
+        "siteNotify": "מתוך {ios} מכשירי אייפון"
       },
       "viewAll": "לכל המשתמשים →",
       "range": {

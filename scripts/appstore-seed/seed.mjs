@@ -17,6 +17,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { PEOPLE, CIRCLES, OFFICES } from './people.mjs'
 import { character, portrait } from './avatars.mjs'
+import { loadRootEnv } from '../env.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '../..')
@@ -24,13 +25,10 @@ const sharp = (await import('file:///' + path.resolve(ROOT, 'web/node_modules/sh
 const { createClient } = await import('file:///' + path.resolve(ROOT, 'web/node_modules/@supabase/supabase-js/dist/index.mjs').replace(/\\/g, '/'))
 
 // ── credentials ────────────────────────────────────────────────────────────
-const env = Object.fromEntries(
-  fs.readFileSync(path.join(ROOT, 'mobile/.env'), 'utf8')
-    .split('\n').filter(l => l.includes('=') && !l.trim().startsWith('#'))
-    .map(l => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]))
-const URL = env.EXPO_PUBLIC_SUPABASE_URL
+const env = loadRootEnv()
+const URL = env.SUPABASE_URL
 const KEY = env.SUPABASE_SERVICE_ROLE_KEY
-if (!URL || !KEY) throw new Error('missing SUPABASE url / service role key in mobile/.env')
+if (!URL || !KEY) throw new Error('missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in the root .env')
 const db = createClient(URL, KEY, { auth: { persistSession: false } })
 
 const MANIFEST = path.join(HERE, 'manifest.json')
