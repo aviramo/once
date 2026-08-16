@@ -4,15 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#F1EEF8" />
-  <title>Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות</title>
-  <meta name="description" content="בלי פיד, בלי אינסוף החלקות ובלי עשרים שיחות פתוחות. Once מציגה אדם אחד בכל פעם, עם 10 דקות להשיב להזמנה" />
+  <title>Once | היכרות כמו בחיים האמיתיים</title>
+  <meta name="description" content="היכרות כמו בחיים האמיתיים. אדם אחד שנמצא קרוב ופעיל עכשיו, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס" />
   <link rel="canonical" href="https://once-lake.vercel.app/" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg?v=12" />
   <link rel="icon" type="image/png" href="favicon.png?v=12" />
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Once" />
-  <meta property="og:title" content="Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות" />
-  <meta property="og:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
+  <meta property="og:title" content="Once | היכרות כמו בחיים האמיתיים" />
+  <meta property="og:description" content="היכרות כמו בחיים האמיתיים. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
   <meta property="og:image" content="https://once-lake.vercel.app/og-image.png?v=2" />
   <meta property="og:image:width" content="1024" />
   <meta property="og:image:height" content="500" />
@@ -21,14 +21,13 @@
   <meta property="og:locale" content="he_IL" />
   <meta property="og:locale:alternate" content="en_US" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות" />
-  <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
+  <meta name="twitter:title" content="Once | היכרות כמו בחיים האמיתיים" />
+  <meta name="twitter:description" content="היכרות כמו בחיים האמיתיים. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png?v=2" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <!-- The shared motion vocabulary, and the one choreography this page has in
-       common with /download: the banner picture building itself. -->
+  <!-- The motion vocabulary, and the banner picture's own build. -->
   <link rel="stylesheet" href="entrance.css?v=1" />
   <link rel="stylesheet" href="styles.css?v=61" />
   <script>
@@ -72,7 +71,11 @@
             <li><button type="button" role="option" data-lang="en">English<svg class="lang-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>
           </ul>
         </div>
-        <a class="btn btn-primary header-cta" id="header-cta" href="download.html">להורדת האפליקציה</a>
+        <!-- href = the Play listing itself, and `data-dl` is what the script
+             finds these by. Without JS there is no dialog to open and no
+             platform to read, so the honest fallback is the store; with JS the
+             press is answered in place (see "Download press" below). -->
+        <a class="btn btn-primary header-cta" id="header-cta" data-dl href="https://play.google.com/store/apps/details?id=com.aviramo.once">להורדת האפליקציה</a>
         <button class="menu-toggle" id="menu-toggle" type="button" aria-label="תפריט" aria-expanded="false">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
         </button>
@@ -140,7 +143,7 @@
        phone (user directive 2026-07-27), so it is always on screen: it never
        hides for another button, because there is no other button. -->
   <div class="mobile-cta" id="mobile-cta">
-    <a class="btn btn-primary btn-lg" href="download.html" id="mobile-cta-btn">להורדת האפליקציה</a>
+    <a class="btn btn-primary btn-lg" data-dl href="https://play.google.com/store/apps/details?id=com.aviramo.once" id="mobile-cta-btn">להורדת האפליקציה</a>
   </div>
 
   <!-- What a download press answers with when the device cannot install: the
@@ -162,13 +165,11 @@
     </div>
   </div>
 
-  <script src="store.js?v=1"></script>
+  <script src="store.js?v=2"></script>
   <script src="art.js?v=10"></script>
   <script>
   (function () {
     'use strict';
-
-    var DOWNLOAD_URL = 'download.html';
 
     /* ---------- The counter ----------
        The printed cards are handed out by hand and the site is passed around by
@@ -255,16 +256,18 @@
     var STRINGS = {
       he: {
         dir: 'rtl',
-        title: 'Once | אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות',
-        metaDescription: 'בלי פיד, בלי אינסוף החלקות ובלי עשרים שיחות פתוחות. Once מציגה אדם אחד בכל פעם, עם 10 דקות להשיב להזמנה',
-        ogDescription: 'בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה',
+        title: 'Once | היכרות כמו בחיים האמיתיים',
+        metaDescription: 'היכרות כמו בחיים האמיתיים. אדם אחד שנמצא קרוב ופעיל עכשיו, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס',
+        ogDescription: 'היכרות כמו בחיים האמיתיים. אדם אחד בכל פעם, 10 דקות להשיב להזמנה',
         ui: { tag: 'בהרצה', preview: 'תצוגה מקדימה', noteIOS: 'Once עדיין לא באייפון. היא בתהליך אישור בחנות של אפל, ותהיה כאן ברגע שנקבל אישור', iosNotify: 'עדכנו אותי כשיש אייפון', noteDesktop: 'פתחו את הדף מהטלפון, או סרקו את הקוד:', download: 'להורדת האפליקציה', menu: 'תפריט', close: 'סגירה', skip: 'דלג לתוכן' },
         /* One label per pillar, in pillar order. */
         nav: { links: ['אדם אחד', 'זמן אמת', 'מעגלים', 'הורים'], login: 'התחברות' },
         hero: {
           eyebrow: 'רק אחד. עכשיו',
-          title: { lines: ['אפליקציית היכרויות', 'שמסרבת להתנהג כמו עוד', 'אפליקציית היכרויות'], accent: true },
-          sub: 'כי הגיע הזמן לשבור את כל ההרגלים הישנים. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס',
+          /* הפתיח אומר מה המוצר כן. משפט הסירוב ירד לשורת המשנה — הוא הבדיחה
+             של המותג, לא הכותרת שלו — וזה אותו סדר בדיוק שבגלויה. */
+          title: { lines: ['היכרות כמו', 'בחיים האמיתיים'], accent: true },
+          sub: 'אפליקציית היכרויות שמסרבת להתנהג כמו עוד אפליקציית היכרויות. אין פיד, אין החלקות, אין עשרים שיחות פתוחות. אדם אחד על המסך, 10 דקות להשיב להזמנה, ומשם נשארים בפוקוס',
           pills: ['אדם אחד בכל פעם', 'זמן אמת', 'מעגלים משותפים', 'לוז של הורים'],
         },
         ask: {
@@ -343,15 +346,15 @@
 
       en: {
         dir: 'ltr',
-        title: 'Once | A dating app that refuses to behave like a dating app',
-        metaDescription: 'No feed, no endless swiping, no twenty open chats. Once shows you one person at a time, with 10 minutes to answer an invitation',
-        ogDescription: 'No feed and no endless swiping. One person at a time, 10 minutes to answer an invitation',
+        title: 'Once | Meeting someone like in real life',
+        metaDescription: 'Meeting someone like in real life. One person who is nearby and active right now, 10 minutes to answer an invitation, and from there you stay focused',
+        ogDescription: 'Meeting someone like in real life. One person at a time, 10 minutes to answer an invitation',
         ui: { tag: 'Beta', preview: 'Preview', noteIOS: 'Once is not on iPhone yet. It is in review at the App Store and will be here the moment it is approved', iosNotify: 'Tell me when iPhone is ready', noteDesktop: 'Open this page on your phone, or scan the code:', download: 'Download the app', menu: 'Menu', close: 'Close', skip: 'Skip to content' },
         nav: { links: ['One at a time', 'Real time', 'Circles', 'Parents'], login: 'Login' },
         hero: {
           eyebrow: 'Just one. Right now',
-          title: { lines: ['A dating app', 'that refuses to be', 'a dating app'], accent: true },
-          sub: "Because it's time to break every old habit. No feed, no swiping, no twenty open chats. One person on the screen, 10 minutes to answer an invitation, and from there you stay focused",
+          title: { lines: ['Meeting someone', 'like in real life'], accent: true },
+          sub: "A dating app that refuses to behave like another dating app. No feed, no swiping, no twenty open chats. One person on the screen, 10 minutes to answer an invitation, and from there you stay focused",
           pills: ['One person at a time', 'Real time', 'Shared circles', 'Parent schedules'],
         },
         ask: {
@@ -727,11 +730,14 @@
     });
 
     /* ---------- Download press ----------
-       Every download button on this page does what the one on /download does,
-       instead of travelling there first (user directive 2026-07-26): Android
-       leaves for Play, and a device that cannot install gets the same answer that
-       page gives, in place. The markup keeps href="download.html" so a visitor
-       without JS still lands somewhere that works. */
+       A download press is answered HERE and never by travelling to a page about
+       it (user directive 2026-07-26): Android leaves for Play, and a device that
+       cannot install gets its answer in place — the scan code on a desktop, the
+       notify button on an iPhone. There was a /download page carrying a second
+       copy of exactly that, and every invite link in the app went through it; it
+       is deleted (2026-08-16) and this page is where they all land now, with
+       their invite in the query. The markup's own href is the Play listing, for
+       a visitor with no JS. */
     var dl = document.getElementById('dl');
     var dlNote = document.getElementById('dl-note');
     var dlQr = document.getElementById('dl-qr');
@@ -761,13 +767,19 @@
       var s = document.createElement('script');
       s.src = 'qr.js?v=1';
       s.onload = function () {
-        dlQr.innerHTML = window.OnceQR.svg(window.OnceStore.url(), window.OnceStore.qrColors);
+        /* Straight at Play, EXCEPT when this visit carries an invite: then the
+           code is THIS page's URL, so the invite survives the hop from screen to
+           phone and the phone's own platform is read there rather than here. A
+           code pointing at Play would hand an iPhone a listing it cannot use and
+           would drop a group token that only this page knows how to pass on. */
+        var target = window.OnceStore.referrer() ? location.href : window.OnceStore.url();
+        dlQr.innerHTML = window.OnceQR.svg(target, window.OnceStore.qrColors);
       };
       document.head.appendChild(s);
     }
 
     function wireDownloadButtons() {
-      Array.prototype.forEach.call(document.querySelectorAll('a[href="' + DOWNLOAD_URL + '"]'), function (a) {
+      Array.prototype.forEach.call(document.querySelectorAll('a[data-dl]'), function (a) {
         if (a.dataset.dlWired) return;
         a.dataset.dlWired = '1';
         /* Counted on every route out of here, Android included — that one goes

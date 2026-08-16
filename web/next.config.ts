@@ -16,8 +16,8 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   // Let proxy.ts (STATIC_PAGES) decide which clean paths keep a trailing
-  // slash. Without this, Next would 308 /download/ -> /download before the
-  // proxy runs, dropping the slash the brand link is shared with.
+  // slash. Without this, Next would 308 /privacy/ -> /privacy before the
+  // proxy runs, dropping the slash a shared link may carry.
   skipTrailingSlashRedirect: true,
 };
 

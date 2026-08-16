@@ -10,11 +10,11 @@
        web/src/proxy.ts for every visitor, WhatsApp's crawler included. Without
        these tags a group invite pasted into WhatsApp showed no image. Copy is
        static (a crawler never runs the script). Same feature-graphic art as the
-       personal invite (download.html) so every share unfurls the same card. -->
+       personal invite and the home page, so every share unfurls the same card. -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="Once" />
   <meta property="og:title" content="Once | מפגש אחד בזמן אמת" />
-  <meta property="og:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
+  <meta property="og:description" content="היכרות כמו בחיים האמיתיים. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
   <meta property="og:image" content="https://once-lake.vercel.app/og-image.png?v=2" />
   <meta property="og:image:width" content="1024" />
   <meta property="og:image:height" content="500" />
@@ -22,7 +22,7 @@
   <meta property="og:locale" content="he_IL" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Once | מפגש אחד בזמן אמת" />
-  <meta name="twitter:description" content="בלי פיד ובלי אינסוף החלקות. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
+  <meta name="twitter:description" content="היכרות כמו בחיים האמיתיים. אדם אחד בכל פעם, 10 דקות להשיב להזמנה" />
   <meta name="twitter:image" content="https://once-lake.vercel.app/og-image.png?v=2" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12" />
   <!-- The site palette, generated from the app's colors — same source as every
@@ -50,13 +50,13 @@
   <div class="card">
     <h1>Once</h1>
     <p>פותחים את האפליקציה…</p>
-    <!-- invite.js repoints this at the download page with the invite attached.
+    <!-- invite.js repoints this at the home page with the invite attached.
          It is only the manual escape hatch: with no app to catch the link the
          script forwards there on its own within a moment. -->
-    <a class="btn" id="fallback" href="/download">להורדת האפליקציה</a>
+    <a class="btn" id="fallback" href="/">להורדת האפליקציה</a>
   </div>
-  <!-- Hand off to the installed app, else forward to the download page. Shared
+  <!-- Hand off to the installed app, else forward to the home page. Shared
        with the friend invite (/f/) — same behaviour, different link shape. -->
-  <script src="/invite.js?v=2"></script>
+  <script src="/invite.js?v=3"></script>
 </body>
 </html>

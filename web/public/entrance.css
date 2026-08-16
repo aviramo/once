@@ -1,20 +1,19 @@
 /* ==========================================================================
    Once — THE ENTRANCE
-   The shared vocabulary for how a page ARRIVES: two easings, six keyframes,
-   and the one choreography that belongs to neither page in particular — the
-   store banner, which art.js draws for the landing page and the download page
-   alike, building itself piece by piece.
+   The vocabulary for how a page ARRIVES: two easings, six keyframes, and the
+   one choreography that is the PICTURE's rather than any page's — the store
+   banner, which art.js draws, building itself piece by piece.
 
-   It is here and not in styles.css because download.html is deliberately
-   standalone (it does not load the site stylesheet), and it is not copied into
-   that page because the two banners are the SAME PICTURE: a build that differed
-   between them would be two answers to one question. Each page then states its
-   OWN choreography — what it puts on screen and in what order — against these
-   keyframes.
+   It is its own file and not part of styles.css because it was written for two
+   pages: this build was shared with /download, which was deliberately
+   standalone and did not load the site stylesheet. That page is gone
+   (2026-08-16) and the split is kept as it is — the banner's build belongs to
+   the banner, and a page states its OWN choreography, what it puts on screen
+   and in what order, against these keyframes.
 
    Nothing in this file loops. Every animation is one-shot, and when it has
-   landed the page is still: a drift that never ends is decoration, and both
-   pages here are asking to be read and then acted on.
+   landed the page is still: a drift that never ends is decoration, and this
+   page is asking to be read and then acted on.
 
    THE GATE. Everything is scoped to html.js-intro, which a page's own inline
    head script sets BEFORE the first paint, and only when JS runs and reduced

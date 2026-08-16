@@ -7,13 +7,19 @@ const PUBLIC_FILE_RE = /\.(.*)$/;
 
 // Clean URL -> static marketing file in /public. The deployed mobile app
 // links to the extensionless /privacy and /terms (with ?lang=), so those
-// paths must keep resolving here. /download is the store-redirect landing;
-// both the slashless and trailing-slash forms map to it
-// (skipTrailingSlashRedirect keeps /download/ from being stripped).
+// paths must keep resolving here, trailing slash or not
+// (skipTrailingSlashRedirect keeps /privacy/ from being stripped).
 //
 // /scan was the business card's landing and is gone (2026-08-15): the card's QR
 // points at `/` now, so the page had no way in left. Its beacon route
 // (`/api/scan`) went with it.
+//
+// /download is gone too (2026-08-16): the home page answers a download press
+// in place — Play on Android, the iPhone note with its notify button, the scan
+// code on a desktop — so the second page saying the same thing had nothing
+// left to say. It is not listed here and therefore falls through to the
+// unknown-path rule below, which sends it home; that IS the redirect for any
+// link to it still in the wild.
 //
 // `/` is a special case: it shows the static marketing site for visitors
 // who are signed OUT, and the admin dashboard (the Next-rendered page) for
@@ -24,8 +30,6 @@ const STATIC_PAGES: Record<string, string> = {
   "/privacy": "/privacy.html",
   "/terms": "/terms.html",
   "/child-safety": "/child-safety.html",
-  "/download": "/download.html",
-  "/download/": "/download.html",
 };
 
 // Referral landing: /i/<CODE> is the link a user shares from the app's invite
@@ -33,11 +37,15 @@ const STATIC_PAGES: Record<string, string> = {
 // into `referrer`, which Play preserves through the install and hands back to
 // the app via the Install Referrer API on first launch — that is the whole
 // attribution mechanism, and it is why the invitee never has to type anything.
-// Everyone else (desktop, iPhone) falls through to the normal download page,
-// which offers the Play link on desktop and states plainly on iPhone that
-// Once is Android-only; a desktop install simply goes unattributed.
+// Everyone else (desktop, iPhone) goes to the home page with the code in the
+// query, which is the very shape store.js parses back out for a group or
+// friend invite — so the code still rides the Play referrer from there, and a
+// device that cannot install gets the page's own answer (the scan code on a
+// desktop, the notify button on an iPhone) instead of a page of its own.
+// A REDIRECT and not a rewrite: the home page's assets are relative, and
+// served under /i/<CODE> every one of them would resolve to /i/… and 404.
 //
-// Duplicated from public/download.html on purpose: that file is a static asset
+// Duplicated from public/store.js on purpose: that file is a static asset
 // served straight from /public and cannot import a shared constant.
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.aviramo.once";
 const REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
@@ -125,9 +133,9 @@ export async function proxy(request: NextRequest) {
       play.searchParams.set("referrer", `ref=${code}`);
       return NextResponse.redirect(play);
     }
-    const url = request.nextUrl.clone();
-    url.pathname = "/download.html";
-    return NextResponse.rewrite(url);
+    const home = new URL("/", request.url);
+    home.searchParams.set("ref", code);
+    return NextResponse.redirect(home);
   }
 
   // Group invite link. Rewrite (not redirect) so the browser keeps /g/<TOKEN>

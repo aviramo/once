@@ -1,18 +1,22 @@
 /* Once - the invite hand-off, in ONE place.
    Both invite links (/g/<TOKEN> for a group, /f/<CODE> for a friend) serve a
    page whose only job is: hand the invite to the installed app, and when
-   nothing catches it, put the visitor on the real download page with the invite
-   still attached. The two links differ only in their shape, so they share this
+   nothing catches it, put the visitor on the home page with the invite still
+   attached. The two links differ only in their shape, so they share this
    module rather than each carrying its own copy of the same script.
 
-   The invite rides to /download as the very query fragment the app parses back
-   out of the Play install referrer ("grp=<TOKEN>" / "ref=<CODE>&f=1"), and
-   store.js passes it through to the store link — so a fresh install still joins
-   the group / connects the friend on first launch, with nothing to type. */
+   The invite rides to `/` as the very query fragment the app parses back out of
+   the Play install referrer ("grp=<TOKEN>" / "ref=<CODE>&f=1"), and store.js
+   passes it through to the store link — so a fresh install still joins the
+   circle / connects the friend on first launch, with nothing to type. The home
+   page is the destination because it is the one that answers a download press:
+   Play on Android, the scan code on a desktop, the notify button on an iPhone.
+   There was a /download page for this and it said nothing the home page does
+   not (deleted 2026-08-16). */
 (function (w) {
   'use strict';
 
-  var DOWNLOAD = '/download';
+  var HOME = '/';
   var SCHEME = 'once';
   /* Same package as store.js's Play link. Duplicated for the same reason that
      one is: these are static assets served straight from /public and cannot
@@ -51,11 +55,11 @@
 
   /* Not an invite URL at all (a truncated or hand-edited link): there is
      nothing to hand off, so just go where every stray visitor belongs. */
-  if (!shape) { location.replace(DOWNLOAD); return; }
+  if (!shape) { location.replace(HOME); return; }
 
-  var download = DOWNLOAD + '?' + shape.query(value);
+  var landing = HOME + '?' + shape.query(value);
   var button = document.getElementById('fallback');
-  if (button) button.href = download;
+  if (button) button.href = landing;
 
   /* Where to send the browser. Android gets an `intent://` URI rather than the
      bare `once://` one: it names the package, so the BROWSER resolves the whole
@@ -72,7 +76,7 @@
       ';package=' + PACKAGE +
       /* Absolute: the browser hands this to a fresh navigation of its own, so a
          site-relative path has nothing to resolve against. */
-      ';S.browser_fallback_url=' + encodeURIComponent(location.origin + download) +
+      ';S.browser_fallback_url=' + encodeURIComponent(location.origin + landing) +
       ';end';
   }
 
@@ -82,7 +86,7 @@
      without firing anything. */
   var timer = setTimeout(function () {
     if (document.hidden) return;
-    location.replace(download);
+    location.replace(landing);
   }, HANDOFF_MS);
   w.addEventListener('pagehide', function () { clearTimeout(timer); });
 

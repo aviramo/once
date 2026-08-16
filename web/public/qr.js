@@ -8,9 +8,9 @@
  * Exposes ONE entry point:
  *   OnceQR.svg(text, { size, dark, light, quiet }) -> SVG markup string
  *
- * Loaded lazily by download.html, and only on desktop — the QR is the
- * desktop-only "scan this with your phone" affordance, so a phone visitor
- * never pays for these bytes.
+ * Loaded lazily by the home page's download dialog, and only on a desktop —
+ * the QR is the desktop-only "scan this with your phone" affordance, so a phone
+ * visitor never pays for these bytes.
  */
 (function (root) {
   "use strict";

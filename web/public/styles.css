@@ -697,7 +697,7 @@ strong { color: var(--ink); font-weight: 600; }
    thing never arrives twice. Two clocks drive it and they do not overlap:
 
      html.js-intro.go   the FIRST SCREEN, on load — the header, the picture
-                        (entrance.css, shared with /download) and the hero
+                        (entrance.css) and the hero
                         stanza. None of it is scroll-triggered, because none
                         of it waits for a scroll that has already happened.
      html.js-reveal     everything below the fold, on the IntersectionObserver,

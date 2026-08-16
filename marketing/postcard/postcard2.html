@@ -66,7 +66,15 @@
   .rings i.d{width:calc(var(--mm)*163);height:calc(var(--mm)*163);opacity:.12}
   .rings b{position:absolute;width:calc(var(--mm)*1.2);height:calc(var(--mm)*1.2);border-radius:999px;background:rgba(218,207,236,.42)}
 
-  .lockup{flex:none;display:flex;align-items:center;gap:calc(var(--mm)*1.8);direction:ltr;align-self:flex-start}
+  /* השם עומד בקצה הנגדי לטקסט. כשהוא היה מעל עמודת הטקסט, בצד ימין, הוא נקרא
+     כשורה ראשונה שלה; משמאל הוא חוזר להיות מה שהוא — חתימה על הכרטיס. המרווח
+     מוצהר ולא נשען על השוליים האוטומטיים של .statement, שנבלעו ברגע שהכותרת
+     גדלה לשתי שורות. */
+  .lockup{
+    flex:none;display:flex;align-items:center;gap:calc(var(--mm)*1.8);
+    direction:ltr;align-self:flex-end;
+    margin-bottom:calc(var(--mm)*7);
+  }
   .lockup svg{height:calc(var(--mm)*11);width:auto;display:block}
   .lockup span{font-size:calc(var(--mm)*8.8);font-weight:900;color:#fff;line-height:.8;letter-spacing:-.02em}
 
@@ -79,9 +87,18 @@
      אחת, ולכן גם הגובה שלה הוא גובה השורה עצמה. */
   /* 13: נמדד על הקובץ עצמו. ב־11.4 השורה תפסה 75.1 מ״מ מתוך 89 של העמודה,
      כלומר נשארו 14 מ״מ מתים בקצה. זה הגודל שממלא את הרוחב ועדיין נושם. */
+  /* שתי שורות, ולכן קטן יותר מהכותרת של ארבע מילים בשורה אחת שעמדה כאן.
+     nowrap ירד: השבירה מוצהרת ב־HTML ולא מושארת למקרה. */
   .statement h1.big{
-    font-size:calc(var(--mm)*13);line-height:calc(var(--mm)*15.4);
-    white-space:nowrap;
+    font-size:calc(var(--mm)*11.4);line-height:calc(var(--mm)*13);
+  }
+  /* מדרגת הביניים: הטענה הקונקרטית שפורעת את הפתיח. אותו טיפול שהיה על
+     "שמסרבת להתנהג" — 900, לבן מלא, נטוי לצד הנגדי של הכפתור. */
+  .statement .proof{
+    font-size:calc(var(--mm)*7.4);line-height:calc(var(--mm)*8.4);
+    font-weight:900;color:#fff;letter-spacing:-.03em;
+    margin-top:calc(var(--mm)*5.5);
+    rotate:.9deg;
   }
   .statement h1 em{font-style:normal;color:#EFE7FB}
   .statement p em{font-style:normal;color:#EFE7FB}
@@ -149,11 +166,15 @@
   /* הקו המפריד הוסר. המרווח שהוא נשא (8 מעליו ו־7.6 מתחתיו) עובר לפסקה
      עצמה, אחרת הכותרת והפסקה נצמדות. */
   .statement p{
-    /* שלוש שורות, והראשונה נושאת כפתור: 7.6 היו נכונים לשתי שורות טקסט,
-       וכאן הן היו מרסקות את הכפתור אל השורה שמתחתיו. */
     font-size:calc(var(--mm)*4.6);line-height:calc(var(--mm)*9.4);
     font-weight:500;color:rgba(255,255,255,.88);
     margin-top:calc(var(--mm)*13);
+  }
+  /* המדרגה הקטנה. הכל בה באותו גודל עכשיו — הבדיחה כולה ירדה מתחת לטענה,
+     ולכן "שמסרבת להתנהג" איננו עוד הצעקה. */
+  .statement .refuse{
+    font-size:calc(var(--mm)*4);line-height:calc(var(--mm)*6.6);
+    margin-top:calc(var(--mm)*6.5);
   }
   /* ההדגשה בתוך הפסקה: מדרגה אחת למעלה בסולם שכבר קיים בכרטיס (500 גוף,
      700 הדגשה, 900 כותרת) ולבן מלא במקום ה־88% של הגוף. אין כאן צבע חדש. */
@@ -319,13 +340,17 @@
            מתחתיה: בדיוק ההיררכיה של דף הבית, רק שמה שמוביל הוא הדבר שאף
            מתחרה לא יכול להגיד. הכותרת נשארת בשורה אחת, כי שבירה אחרי
            "רק אחד." הייתה משאירה נקודה בסוף שורה. -->
-      <h1 class="big">רק אחד. עכשיו!</h1>
+      <!-- הפתיח אומר מה המוצר כן, ולא במה הוא מסרב להיות. "רק אחד. עכשיו"
+           נשאר מתחתיו בגודל הביניים כי הוא ההוכחה הקונקרטית לטענה המופשטת
+           שמעליו, ומשפט הסירוב יורד לקטן — הוא הבדיחה, לא הכותרת. -->
+      <h1 class="big">היכרות כמו<br>בחיים האמיתיים</h1>
       <!-- הסירוב מצויר ולא רק נאמר: הדבר שהיא מסרבת להיות נמחק בקו. הסימון
            עומד על החצי השני של המשפט, כי שם המשמעות, ולא על הצירוף הראשון,
            שהוא מה שהאפליקציה כן. -->
       <!-- משחק גדלים, לפי מי נושא את המשמעות: הקטגוריה היא תווית ולכן קטנה,
            הסירוב הוא כל העמדה ולכן הוא צועק, והדבר שנמחק כבר לא צריך גודל. -->
-      <p><span class="btnword">אפליקציית היכרויות</span><span class="shout">שמסרבת להתנהג</span><br><em class="nope">כמו עוד אפליקציית היכרויות</em></p>
+      <p class="proof">רק אחד. עכשיו!</p>
+      <p class="refuse"><span class="btnword">אפליקציית היכרויות</span>שמסרבת להתנהג<br><em class="nope">כמו עוד אפליקציית היכרויות</em></p>
     </div>
 
     <!-- היצירה של האתר וחנות Play, מ־marketing/store/play-feature-graphic.svg,

@@ -1,31 +1,22 @@
 /* Once - where a download press goes, in ONE place.
-   Both the landing page and /download press the same button, so the store URL,
-   the platform rules and the referral rule live here rather than being written
-   twice and drifting apart. Pages own their own copy (the notes are per-language)
-   and their own presentation; this module owns the destination. */
+   The home page owns the press now (there was a /download page for it until
+   2026-08-16 and it said nothing this one does not), so the store URL, the
+   platform rules and the referral rule live here rather than in each page that
+   needs them. A page owns its own copy (the notes are per-language) and its own
+   presentation; this module owns the destination. */
 (function (w) {
   'use strict';
 
   var PLAY_URL = 'https://play.google.com/store/apps/details?id=com.aviramo.once';
 
-  /* A personal invite (/i/<CODE>) is rewritten to the download page for every
-     non-Android visitor while the browser keeps the /i/<CODE> URL, so the code is
-     still readable here and can ride the Play referrer exactly as proxy.ts packs
-     it for an Android visitor. */
-  var REFERRAL_PATH_RE = /^\/i\/([A-Za-z0-9]{4,16})\/?$/;
-
-  /* "ref=<CODE>" for a personal invite whose /i/<CODE> URL the browser kept. */
-  function referrerFromPath() {
-    var m = REFERRAL_PATH_RE.exec(location.pathname);
-    return m ? 'ref=' + m[1].toUpperCase() : null;
-  }
-
-  /* The invite hand-off pages (/g/<TOKEN>, /f/<CODE>) forward here with the
-     invite in the query when no installed app caught the link (invite.js). The
-     params ARE the referrer fragment the app parses back on first launch, so
-     they pass straight through: a group token under its own `grp` (six digits
-     would otherwise be indistinguishable from a referral code), a friend under
-     the referral `ref` plus the friend flag. */
+  /* EVERY invite reaches this page as a QUERY, whatever shape it was shared in:
+     a personal invite (/i/<CODE>) is redirected here as ?ref=<CODE> by
+     proxy.ts, and the two hand-off pages (/g/<TOKEN>, /f/<CODE>) forward here
+     with theirs when no installed app caught the link (invite.js). The params
+     ARE the referrer fragment the app parses back on first launch, so they pass
+     straight through: a group token under its own `grp` (six digits would
+     otherwise be indistinguishable from a referral code), a friend under the
+     referral `ref` plus the friend flag. */
   function referrerFromQuery() {
     if (typeof URLSearchParams !== 'function') return null;
     var q = new URLSearchParams(location.search);
@@ -50,12 +41,15 @@
     isIOS: isIOS,
     /* Anything that is neither: nothing to install here, the phone does it. */
     isDesktop: !isAndroid && !isIOS,
+    /* Whether this visitor arrived on an invite at all. The scan code asks,
+       because a code that skips this page would drop the invite with it. */
+    referrer: referrerFromQuery,
     /* The Play listing, carrying the invite when there is one. `&`, not `?`:
        PLAY_URL already carries the ?id= query, and appending a second `?`
        folded the whole referrer INTO the package id — Play saw no referrer at
        all, so every invite built here went unattributed. */
     url: function () {
-      var referrer = referrerFromPath() || referrerFromQuery();
+      var referrer = referrerFromQuery();
       return referrer ? PLAY_URL + '&referrer=' + encodeURIComponent(referrer) : PLAY_URL;
     },
     /* The scan code is drawn with the app's ink on white; qr.js needs literals. */

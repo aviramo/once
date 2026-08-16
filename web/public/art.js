@@ -393,7 +393,7 @@
   /* Every piece of the banner comes out of these helpers wrapped in a group that
      carries a CLASS and nothing else. It paints nothing and moves nothing: it is
      there so a page can stage the picture's ARRIVAL piece by piece
-     (download.html does) without a CSS transform having to fight the `transform`
+     (index.html does) without a CSS transform having to fight the `transform`
      ATTRIBUTE already on the thing it would move. A CSS transform REPLACES that
      attribute rather than composing with it, which would tear the numeral, the
      hearts and the card off their positions the moment they were animated; the
