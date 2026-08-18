@@ -10,6 +10,7 @@ import { invoke, markStartupComplete, onAuthRecovered, publicImageUrl, API_TIMEO
 import { tap } from '../src/lib/haptics'
 import { useRequestOffline, clearNetOffline } from '../src/lib/net'
 import { nameFromTitle } from '../src/lib/profileTitle'
+import { withoutProximity } from '../src/lib/units'
 import { matchImageUrls } from '../src/lib/profileImages'
 import { useUserStore, resolveLocationType, selectProfileBuilt, selectWatching, type Profile, type InviteCard } from '../src/stores/userStore'
 import { t, tg, tgg, genderize, lang } from '../src/i18n'
@@ -1426,7 +1427,7 @@ export default function HomePage() {
   // takes the clock off the chip and puts the X there (inviteEnded below).
   const inviteLapsedInvite = useMemo(
     () => (inviteServerPending && inviteInviteLapsed
-      ? { ...inviteServerPending, state: 'missed' as const, message: 'expire' }
+      ? { ...withoutProximity(inviteServerPending), state: 'missed' as const, message: 'expire' }
       : null),
     [inviteServerPending, inviteInviteLapsed],
   )

@@ -70,6 +70,20 @@ export function formatDistance(
 // directive 2026-07-27: time alone is fine, distance alone is fine, both is
 // both). Only when NEITHER half exists does it return '' — the caller's
 // "don't render the chip at all" signal.
+// A CARD THAT IS OVER CARRIES NEITHER HALF (user directive 2026-08-16). The
+// proximity chip is live presence, and the moment an invitation ends the card
+// is a record of what happened rather than a person the game is still putting
+// in front of you. The server strips both keys off every ended board
+// (`_watch_profile`'s `p_ended`), so this is only for a card the CLIENT drew
+// itself out of a live one — the invitation that reaches 00:00 on screen, whose
+// dead card is synthesized from the pending profile and would otherwise go on
+// reporting distance and last-seen for the seconds until the socket event
+// lands. Stated here beside formatProximity, which is what the pair feeds.
+export function withoutProximity<T extends { distance?: number | null; last_seen?: string | null }>(p: T): T {
+  const { distance: _distance, last_seen: _lastSeen, ...rest } = p
+  return rest as T
+}
+
 export function formatProximity(
   m: number | null | undefined,
   lastSeenIso: string | null | undefined,
